@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -55,6 +56,9 @@ public class InsertionAdorner : Adorner
 
 public partial class MainWindow : Window
 {
+    [DllImport("psapi.dll")]
+    private static extern int EmptyWorkingSet(IntPtr hwProc);
+
     private readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "apps.json");
     private AppSettings _settings = new();
     private readonly ObservableCollection<AppDisplayItem> _displayList = new();
@@ -103,6 +107,18 @@ public partial class MainWindow : Window
         BuildGroupChips();
         RefreshList();
         BuildTrayContextMenu();
+    }
+
+    public static void TrimMemory()
+    {
+        try
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);
+            GC.WaitForPendingFinalizers();
+            using var proc = Process.GetCurrentProcess();
+            EmptyWorkingSet(proc.Handle);
+        }
+        catch { }
     }
 
     private System.Drawing.Icon LoadMintIcon()
@@ -213,11 +229,11 @@ public partial class MainWindow : Window
 
         // Exit
         var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
-        {
-            Font = font,
-            ForeColor = foreColor,
-            Padding = new WinForms.Padding(6, 4, 6, 4)
-        };
+            {
+                Font = font,
+                ForeColor = foreColor,
+                Padding = new WinForms.Padding(6, 4, 6, 4)
+            };
         exitItem.Click += (s, e) =>
         {
             _notifyIcon.Visible = false;
@@ -241,6 +257,7 @@ public partial class MainWindow : Window
     {
         e.Cancel = true;
         Hide();
+        TrimMemory(); // Flushes RAM down to ~15-25 MB in the tray
     }
 
     private void LoadConfig()
