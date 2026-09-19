@@ -23,29 +23,25 @@ namespace Mint
 
             if (useDark)
             {
-                // Windows 11 Fluent Dark Palette (Zinc / Dark Slate)
-                res["FlyoutBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#18181B"));
-                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#27272A"));
-                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#323238"));
-                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#202024"));
-                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3F3F46"));
-                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FAFAFA"));
-                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#A1A1AA"));
+                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0F0F12"));
+                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#18181C"));
+                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26262C"));
+                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#222228"));
+                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2E2E36"));
+                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F4F4F6"));
+                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8E8E98"));
                 res["AccentColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3B82F6"));
-                res["MenuBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#202024"));
             }
             else
             {
-                // Windows 11 Fluent Light Palette
-                res["FlyoutBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F8FAFC"));
+                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F5F7"));
                 res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF"));
-                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F1F5F9"));
-                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F1F5F9"));
-                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E2E8F0"));
-                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0F172A"));
-                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#64748B"));
+                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EBECEF"));
+                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0F1F4"));
+                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#DCDDE2"));
+                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#141416"));
+                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B6B76"));
                 res["AccentColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2563EB"));
-                res["MenuBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF"));
             }
         }
 
