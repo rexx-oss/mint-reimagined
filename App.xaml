@@ -3,32 +3,58 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Startup="Application_Startup">
     <Application.Resources>
-        <!-- Dynamic Brushes swapped in real time by ThemeManager -->
-        <SolidColorBrush x:Key="BgBrush" Color="#09090B"/>
-        <SolidColorBrush x:Key="CardBrush" Color="#18181B"/>
-        <SolidColorBrush x:Key="InputBrush" Color="#27272A"/>
-        <SolidColorBrush x:Key="BorderBrush" Color="#3F3F46"/>
+        <!-- Dynamic Brushes Initialized by ThemeManager -->
+        <SolidColorBrush x:Key="FlyoutBg" Color="#18181B"/>
+        <SolidColorBrush x:Key="CardBg" Color="#27272A"/>
+        <SolidColorBrush x:Key="CardHoverBg" Color="#323238"/>
+        <SolidColorBrush x:Key="InputBg" Color="#202024"/>
+        <SolidColorBrush x:Key="BorderColor" Color="#3F3F46"/>
         <SolidColorBrush x:Key="TextPrimary" Color="#FAFAFA"/>
         <SolidColorBrush x:Key="TextSecondary" Color="#A1A1AA"/>
-        <SolidColorBrush x:Key="AccentBrush" Color="#3B82F6"/>
+        <SolidColorBrush x:Key="AccentColor" Color="#3B82F6"/>
+        <SolidColorBrush x:Key="MenuBg" Color="#202024"/>
 
-        <Style TargetType="TextBox">
-            <Setter Property="Background" Value="{DynamicResource InputBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="FontSize" Value="13"/>
+        <!-- Universal Fluent Context Menu Style -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{DynamicResource MenuBg}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Padding" Value="4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ItemsPresenter/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <Style TargetType="Button">
-            <Setter Property="Background" Value="{DynamicResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontWeight" Value="SemiBold"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Cursor" Value="Hand"/>
+        <Style TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="ItemBorder" CornerRadius="5" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <ContentPresenter ContentSource="Header"/>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Application.Resources>
 </Application>
