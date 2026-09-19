@@ -3,20 +3,27 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Startup="Application_Startup">
     <Application.Resources>
-        <!-- Dynamic Brushes Initialized by ThemeManager -->
-        <SolidColorBrush x:Key="FlyoutBg" Color="#18181B"/>
-        <SolidColorBrush x:Key="CardBg" Color="#27272A"/>
-        <SolidColorBrush x:Key="CardHoverBg" Color="#323238"/>
-        <SolidColorBrush x:Key="InputBg" Color="#202024"/>
-        <SolidColorBrush x:Key="BorderColor" Color="#3F3F46"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#FAFAFA"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#A1A1AA"/>
+        <SolidColorBrush x:Key="WindowBg" Color="#0F0F12"/>
+        <SolidColorBrush x:Key="CardBg" Color="#18181C"/>
+        <SolidColorBrush x:Key="CardHoverBg" Color="#26262C"/>
+        <SolidColorBrush x:Key="InputBg" Color="#222228"/>
+        <SolidColorBrush x:Key="BorderColor" Color="#2E2E36"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#F4F4F6"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#8E8E98"/>
         <SolidColorBrush x:Key="AccentColor" Color="#3B82F6"/>
-        <SolidColorBrush x:Key="MenuBg" Color="#202024"/>
 
-        <!-- Universal Fluent Context Menu Style -->
+        <Style TargetType="TextBox">
+            <Setter Property="Background" Value="{DynamicResource InputBg}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+        </Style>
+
         <Style TargetType="ContextMenu">
-            <Setter Property="Background" Value="{DynamicResource MenuBg}"/>
+            <Setter Property="Background" Value="{DynamicResource CardBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="4"/>
@@ -38,18 +45,16 @@
         <Style TargetType="MenuItem">
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
             <Setter Property="FontSize" Value="12.5"/>
-            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Padding" Value="10,6"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="MenuItem">
-                        <Border x:Name="ItemBorder" CornerRadius="5" Background="Transparent" Padding="{TemplateBinding Padding}">
-                            <Grid>
-                                <ContentPresenter ContentSource="Header"/>
-                            </Grid>
+                        <Border x:Name="Bd" CornerRadius="5" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter ContentSource="Header"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource CardHoverBg}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
