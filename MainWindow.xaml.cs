@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
@@ -8,7 +9,6 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using WinForms = System.Windows.Forms;
 
@@ -40,7 +40,15 @@ namespace Mint
                 Text = "Mint Launcher",
                 Visible = true
             };
-            _notifyIcon.MouseClick += (s, e) => ToggleFlyout();
+            _notifyIcon.MouseClick += (s, e) =>
+            {
+                if (e.Button == WinForms.MouseButtons.Left)
+                {
+                    ShowAndRestore();
+                }
+            };
+
+            BuildTrayContextMenu();
 
             LoadConfig();
             ThemeManager.ApplyTheme(_settings.Theme);
@@ -49,45 +57,40 @@ namespace Mint
             RefreshList();
         }
 
-        protected override void OnSourceInitialized(EventArgs e)
+        private void BuildTrayContextMenu()
         {
-            base.OnSourceInitialized(e);
-            var handle = new WindowInteropHelper(this).Handle;
-            NativeHelper.EnableWindowRoundedCorners(handle);
-        }
+            var menu = new WinForms.ContextMenuStrip();
+            var openItem = new WinForms.ToolStripMenuItem("Open Mint");
+            openItem.Click += (s, e) => ShowAndRestore();
+            menu.Items.Add(openItem);
 
-        private void ToggleFlyout()
-        {
-            if (IsVisible)
+            menu.Items.Add(new WinForms.ToolStripSeparator());
+
+            var exitItem = new WinForms.ToolStripMenuItem("Exit");
+            exitItem.Click += (s, e) =>
             {
-                Hide();
-            }
-            else
-            {
-                PositionAboveTaskbar();
-                Show();
-                Activate();
-                TxtSearch.Focus();
-                TxtSearch.SelectAll();
-            }
+                _notifyIcon.Visible = false;
+                _notifyIcon.Dispose();
+                Application.Current.Shutdown();
+            };
+            menu.Items.Add(exitItem);
+
+            _notifyIcon.ContextMenuStrip = menu;
         }
 
-        private void PositionAboveTaskbar()
+        private void ShowAndRestore()
         {
-            NativeHelper.GetCursorPos(out var pt);
-            var screen = WinForms.Screen.FromPoint(new System.Drawing.Point(pt.X, pt.Y));
-            var wa = screen.WorkingArea;
-
-            // Align gracefully right above the taskbar in the lower right
-            Left = wa.Right - Width - 12;
-            Top = wa.Bottom - Height - 12;
+            Show();
+            WindowState = WindowState.Normal;
+            Activate();
+            TxtSearch.Focus();
         }
 
-        private void Window_Deactivated(object sender, EventArgs e)
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Auto-hide when user clicks away
+            // Minimize to tray instead of quitting
+            e.Cancel = true;
             Hide();
-            ShowLauncherView();
         }
 
         private void LoadConfig()
@@ -95,9 +98,23 @@ namespace Mint
             try
             {
                 if (File.Exists(ConfigPath))
+                {
                     _settings = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(ConfigPath)) ?? new AppSettings();
+                }
             }
             catch { _settings = new AppSettings(); }
+
+            // Preload default tools on first run so the list is never blank
+            if (_settings.Apps.Count == 0)
+            {
+                _settings.Apps = new List<AppItem>
+                {
+                    new AppItem { AppTitle = "Notepad", AppLink = "notepad.exe", AppGroup = "Tools" },
+                    new AppItem { AppTitle = "Calculator", AppLink = "calc.exe", AppGroup = "Tools" },
+                    new AppItem { AppTitle = "Command Prompt", AppLink = "cmd.exe", AppGroup = "System" }
+                };
+                SaveConfig();
+            }
 
             ChkAutoStart.IsChecked = _settings.StartWithWindows;
         }
@@ -146,14 +163,14 @@ namespace Mint
                 var btn = new Button
                 {
                     Content = group,
-                    Padding = new Thickness(10, 4, 10, 4),
+                    Padding = new Thickness(12, 4, 12, 4),
                     Margin = new Thickness(0, 0, 6, 0),
                     FontSize = 11,
                     FontWeight = FontWeights.SemiBold,
                     Cursor = Cursors.Hand,
                     Background = (group == _activeGroupFilter) 
                         ? (Brush)Application.Current.Resources["AccentColor"] 
-                        : (Brush)Application.Current.Resources["CardBg"],
+                        : (Brush)Application.Current.Resources["InputBg"],
                     Foreground = (group == _activeGroupFilter) 
                         ? Brushes.White 
                         : (Brush)Application.Current.Resources["TextSecondary"],
@@ -212,7 +229,6 @@ namespace Mint
                     psi.WorkingDirectory = Path.GetDirectoryName(app.AppLink);
 
                 Process.Start(psi);
-                Hide();
             }
             catch (Exception ex)
             {
@@ -233,21 +249,21 @@ namespace Mint
             {
                 LaunchApp(item.App);
             }
-            else if (e.Key == Key.Escape)
-            {
-                Hide();
-            }
         }
 
         private void LstApps_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter && LstApps.SelectedItem is AppDisplayItem item)
                 LaunchApp(item.App);
-            else if (e.Key == Key.Escape)
-                Hide();
         }
 
         private void LstApps_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (LstApps.SelectedItem is AppDisplayItem item)
+                LaunchApp(item.App);
+        }
+
+        private void MenuLaunch_Click(object sender, RoutedEventArgs e)
         {
             if (LstApps.SelectedItem is AppDisplayItem item)
                 LaunchApp(item.App);
@@ -275,7 +291,6 @@ namespace Mint
                 TxtArgs.Text = item.App.AppParams;
                 TxtGroup.Text = item.App.AppGroup;
                 TxtCustomIcon.Text = item.App.CustomIconPath;
-                ShowSettingsView();
             }
         }
 
@@ -288,22 +303,6 @@ namespace Mint
                 BuildGroupChips();
                 RefreshList(TxtSearch.Text);
             }
-        }
-
-        private void BtnOpenSettings_Click(object sender, RoutedEventArgs e) => ShowSettingsView();
-        private void BtnBackToLauncher_Click(object sender, RoutedEventArgs e) => ShowLauncherView();
-
-        private void ShowSettingsView()
-        {
-            ViewLauncher.Visibility = Visibility.Collapsed;
-            ViewSettings.Visibility = Visibility.Visible;
-        }
-
-        private void ShowLauncherView()
-        {
-            ViewSettings.Visibility = Visibility.Collapsed;
-            ViewLauncher.Visibility = Visibility.Visible;
-            TxtSearch.Focus();
         }
 
         private void BtnBrowseTarget_Click(object sender, RoutedEventArgs e)
@@ -337,7 +336,7 @@ namespace Mint
         {
             if (string.IsNullOrWhiteSpace(TxtTitle.Text) || string.IsNullOrWhiteSpace(TxtPath.Text))
             {
-                MessageBox.Show("Please enter Title and Target.", "Mint", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show("Please provide a Title and Target path.", "Mint", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
@@ -365,7 +364,6 @@ namespace Mint
             SaveConfig();
             BuildGroupChips();
             RefreshList();
-            ShowLauncherView();
             BtnClear_Click(this, new RoutedEventArgs());
         }
 
@@ -416,13 +414,6 @@ namespace Mint
                     RefreshList();
                 }
             }
-        }
-
-        private void BtnExit_Click(object sender, RoutedEventArgs e)
-        {
-            _notifyIcon.Visible = false;
-            _notifyIcon.Dispose();
-            Application.Current.Shutdown();
         }
     }
 }
