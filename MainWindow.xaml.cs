@@ -12,7 +12,9 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 using Point = System.Windows.Point;
@@ -78,9 +80,11 @@ namespace Mint
             InitializeComponent();
             LstApps.ItemsSource = _displayList;
 
+            // Load Mint icon for both window and system tray
+            var appIcon = LoadMintIcon();
             _notifyIcon = new WinForms.NotifyIcon
             {
-                Icon = System.Drawing.SystemIcons.Application,
+                Icon = appIcon,
                 Text = "Mint Launcher",
                 Visible = true
             };
@@ -103,11 +107,38 @@ namespace Mint
             BuildTrayContextMenu();
         }
 
+        private Icon LoadMintIcon()
+        {
+            try
+            {
+                string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mint.ico");
+                if (File.Exists(iconPath))
+                {
+                    Icon = BitmapFrame.Create(new Uri(iconPath));
+                    return new Icon(iconPath);
+                }
+                
+                if (Environment.ProcessPath != null)
+                {
+                    var extracted = Icon.ExtractAssociatedIcon(Environment.ProcessPath);
+                    if (extracted != null)
+                    {
+                        Icon = Imaging.CreateBitmapSourceFromHIcon(extracted.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                        return extracted;
+                    }
+                }
+            }
+            catch { }
+
+            return SystemIcons.Application;
+        }
+
         private void InitAutoScroll()
         {
+            // 35ms interval provides a smooth 28fps scrolling animation
             _autoScrollTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromMilliseconds(25)
+                Interval = TimeSpan.FromMilliseconds(35)
             };
             _autoScrollTimer.Tick += (s, e) =>
             {
@@ -400,7 +431,6 @@ namespace Mint
                 LaunchApp(item.App);
         }
 
-        // --- Visual Tree Helpers ---
         private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
         {
             while (child != null)
@@ -424,12 +454,11 @@ namespace Mint
             return null;
         }
 
-        // --- Drag & Drop: Auto-Scroll on Edge & Insertion Adorner ---
+        // --- Drag & Drop: Controlled Auto-Scroll & Insertion Adorner ---
         private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             var hit = e.OriginalSource as DependencyObject;
 
-            // Do not drag if user is clicking or pulling the scrollbar thumb
             if (FindVisualParent<ScrollBar>(hit) != null)
             {
                 _draggedItem = null;
@@ -481,20 +510,20 @@ namespace Mint
 
             e.Effects = DragDropEffects.Move;
 
-            // 1. Edge-sensing auto-scroll: holding near top or bottom automatically scrolls long lists
+            // Controlled Auto-Scroll: smooth ramp between 1.2px and 4.0px per tick
             Point mousePos = e.GetPosition(LstApps);
-            const double edgeThreshold = 35.0;
+            const double edgeThreshold = 30.0;
 
             if (mousePos.Y >= 0 && mousePos.Y < edgeThreshold)
             {
                 double speedFactor = (edgeThreshold - mousePos.Y) / edgeThreshold;
-                _autoScrollDelta = -Math.Max(3, speedFactor * 14);
+                _autoScrollDelta = -(1.2 + (speedFactor * 2.8));
                 if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
             }
             else if (mousePos.Y > LstApps.ActualHeight - edgeThreshold && mousePos.Y <= LstApps.ActualHeight)
             {
                 double speedFactor = (mousePos.Y - (LstApps.ActualHeight - edgeThreshold)) / edgeThreshold;
-                _autoScrollDelta = Math.Max(3, speedFactor * 14);
+                _autoScrollDelta = (1.2 + (speedFactor * 2.8));
                 if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
             }
             else
@@ -502,7 +531,7 @@ namespace Mint
                 StopAutoScroll();
             }
 
-            // 2. Dotted line insertion hint
+            // Dotted insertion hint line
             var hit = e.OriginalSource as DependencyObject;
             var targetItem = FindVisualParent<ListBoxItem>(hit);
 
