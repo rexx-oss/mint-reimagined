@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Windows;
 
@@ -11,7 +12,6 @@ namespace Mint
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
-            // Catches any hidden crashes so a clear dialog is shown
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {
                 MessageBox.Show($"Mint startup error:\n{args.ExceptionObject}", "Mint Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -26,13 +26,22 @@ namespace Mint
             _mutex = new Mutex(true, MutexName, out bool isNewInstance);
             if (!isNewInstance)
             {
-                MessageBox.Show("Mint is already running. Check your taskbar near the clock.", "Mint", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show("Mint is already running in your system tray.", "Mint", MessageBoxButton.OK, MessageBoxImage.Information);
                 Shutdown();
                 return;
             }
 
+            bool startMinimized = e.Args.Any(a => 
+                a.Equals("--minimized", StringComparison.OrdinalIgnoreCase) || 
+                a.Equals("-min", StringComparison.OrdinalIgnoreCase));
+
             var mainWindow = new MainWindow();
-            mainWindow.Show();
+
+            // Only show the window if opened manually; stay in tray if auto-started
+            if (!startMinimized)
+            {
+                mainWindow.Show();
+            }
         }
     }
 }
