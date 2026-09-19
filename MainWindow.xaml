@@ -1,29 +1,25 @@
 <Window x:Class="Mint.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Mint" Width="380" Height="530"
-        WindowStyle="None"
-        AllowsTransparency="True"
-        Background="Transparent"
-        Topmost="True"
-        ShowInTaskbar="False"
+        Title="Mint Launcher" Width="760" Height="540"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource WindowBg}"
+        Foreground="{DynamicResource TextPrimary}"
         FontFamily="Segoe UI Variable Display, Segoe UI, sans-serif"
-        Deactivated="Window_Deactivated"
         AllowDrop="True"
-        Drop="Window_Drop">
+        Drop="Window_Drop"
+        Closing="Window_Closing">
 
-    <Border Background="{DynamicResource FlyoutBg}" 
-            BorderBrush="{DynamicResource BorderColor}" 
-            BorderThickness="1" 
-            CornerRadius="12" 
-            Margin="6">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.3" Direction="270"/>
-        </Border.Effect>
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="420"/>
+            <ColumnDefinition Width="16"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
 
-        <Grid>
-            <!-- View 1: Main Launcher Flyout -->
-            <Grid x:Name="ViewLauncher" Margin="14">
+        <!-- Left Panel: Apps List & Quick Search -->
+        <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="14">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -31,49 +27,27 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- Header: Logo, Search Bar & Settings Button -->
-                <Grid Grid.Row="0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="8"/>
-                        <ColumnDefinition Width="34"/>
-                    </Grid.ColumnDefinitions>
+                <!-- Search Bar -->
+                <Border Grid.Row="0" Background="{DynamicResource InputBg}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="0,0,0,10">
+                    <Grid Margin="8,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="🔍" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBox x:Name="TxtSearch" Grid.Column="1" 
+                                 Background="Transparent" 
+                                 BorderThickness="0" 
+                                 Foreground="{DynamicResource TextPrimary}" 
+                                 FontSize="13" 
+                                 VerticalAlignment="Center"
+                                 TextChanged="TxtSearch_TextChanged"
+                                 KeyDown="TxtSearch_KeyDown"/>
+                    </Grid>
+                </Border>
 
-                    <Border Grid.Column="0" Background="{DynamicResource InputBg}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1">
-                        <Grid Margin="8,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="🔍" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                            <TextBox x:Name="TxtSearch" Grid.Column="1" 
-                                     Background="Transparent" 
-                                     BorderThickness="0" 
-                                     Foreground="{DynamicResource TextPrimary}" 
-                                     FontSize="13" 
-                                     VerticalAlignment="Center"
-                                     TextChanged="TxtSearch_TextChanged"
-                                     KeyDown="TxtSearch_KeyDown"/>
-                        </Grid>
-                    </Border>
-
-                    <Button Grid.Column="2" Content="⚙" FontSize="14" 
-                            Background="{DynamicResource CardBg}" 
-                            Foreground="{DynamicResource TextPrimary}" 
-                            BorderBrush="{DynamicResource BorderColor}"
-                            BorderThickness="1"
-                            Cursor="Hand"
-                            Click="BtnOpenSettings_Click">
-                        <Button.Resources>
-                            <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="8"/>
-                            </Style>
-                        </Button.Resources>
-                    </Button>
-                </Grid>
-
-                <!-- Groups Filter Bar -->
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="0,10,0,6">
+                <!-- Group Filter Buttons -->
+                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
                     <StackPanel x:Name="PanelGroups" Orientation="Horizontal"/>
                 </ScrollViewer>
 
@@ -100,14 +74,15 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border x:Name="Card" Background="{DynamicResource CardBg}" CornerRadius="8" Padding="10,8" Margin="0,2" Cursor="Hand">
+                            <Border x:Name="Card" Background="{DynamicResource InputBg}" CornerRadius="8" Padding="10,8" Margin="0,2" Cursor="Hand">
                                 <Border.ContextMenu>
                                     <ContextMenu>
+                                        <MenuItem Header="Launch" Click="MenuLaunch_Click"/>
                                         <MenuItem Header="Run as Administrator" Click="MenuRunAsAdmin_Click"/>
-                                        <MenuItem Header="Open File Location" Click="MenuOpenLocation_Click"/>
+                                        <MenuItem Header="Open Location" Click="MenuOpenLocation_Click"/>
                                         <Separator Background="{DynamicResource BorderColor}"/>
                                         <MenuItem Header="Edit" Click="MenuEdit_Click"/>
-                                        <MenuItem Header="Remove" Click="MenuDelete_Click"/>
+                                        <MenuItem Header="Delete" Click="MenuDelete_Click"/>
                                     </ContextMenu>
                                 </Border.ContextMenu>
                                 <Grid>
@@ -133,72 +108,72 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <!-- Footer: Status & Exit -->
+                <!-- Footer -->
                 <Grid Grid.Row="3" Margin="0,10,0,0">
                     <TextBlock x:Name="TxtFooterCount" Text="0 Apps" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
-                    <Button Content="Quit" HorizontalAlignment="Right" Background="Transparent" Foreground="{DynamicResource TextSecondary}" FontSize="11" BorderThickness="0" Cursor="Hand" Click="BtnExit_Click"/>
+                    <TextBlock Text="Double-click or Enter to launch" FontSize="11" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                 </Grid>
             </Grid>
+        </Border>
 
-            <!-- View 2: Slide-in Configuration / Settings Drawer -->
-            <Grid x:Name="ViewSettings" Visibility="Collapsed" Margin="14" Background="{DynamicResource FlyoutBg}">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                    <StackPanel>
-                        <!-- Back Button -->
-                        <Button Content="← Back to Launcher" HorizontalAlignment="Left" Background="Transparent" Foreground="{DynamicResource AccentColor}" FontWeight="SemiBold" BorderThickness="0" Cursor="Hand" Margin="0,0,0,12" Click="BtnBackToLauncher_Click"/>
+        <!-- Right Panel: App Configuration & Themes -->
+        <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="16">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <TextBlock Text="App Configuration" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
 
-                        <TextBlock Text="Add / Edit App" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,8"/>
+                    <TextBlock Text="App Title" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,2"/>
+                    <TextBox x:Name="TxtTitle" Height="28"/>
 
-                        <TextBlock Text="Title" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,4,0,2"/>
-                        <TextBox x:Name="TxtTitle" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Padding="6" Height="28"/>
+                    <TextBlock Text="Target / Exe Path" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtPath" Grid.Column="0" Height="28"/>
+                        <Button Grid.Column="2" Content="..." Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Cursor="Hand" Click="BtnBrowseTarget_Click"/>
+                    </Grid>
 
-                        <TextBlock Text="Target / Exe Path" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,2"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="4"/>
-                                <ColumnDefinition Width="34"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtPath" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Padding="6" Height="28"/>
-                            <Button Grid.Column="2" Content="..." Background="{DynamicResource CardBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Click="BtnBrowseTarget_Click"/>
-                        </Grid>
+                    <TextBlock Text="Arguments (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,2"/>
+                    <TextBox x:Name="TxtArgs" Height="28"/>
 
-                        <TextBlock Text="Parameters" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,2"/>
-                        <TextBox x:Name="TxtArgs" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Padding="6" Height="28"/>
+                    <TextBlock Text="Category / Group (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,2"/>
+                    <TextBox x:Name="TxtGroup" Height="28"/>
 
-                        <TextBlock Text="Group" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,2"/>
-                        <TextBox x:Name="TxtGroup" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Padding="6" Height="28"/>
+                    <TextBlock Text="Custom Icon Path (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,2"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="4"/>
+                            <ColumnDefinition Width="34"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="TxtCustomIcon" Grid.Column="0" Height="28"/>
+                        <Button Grid.Column="2" Content="..." Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Cursor="Hand" Click="BtnBrowseIcon_Click"/>
+                    </Grid>
 
-                        <TextBlock Text="Custom Icon (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,8,0,2"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="4"/>
-                                <ColumnDefinition Width="34"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="TxtCustomIcon" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Padding="6" Height="28"/>
-                            <Button Grid.Column="2" Content="..." Background="{DynamicResource CardBg}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" Click="BtnBrowseIcon_Click"/>
-                        </Grid>
-
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
-                            <Button Content="Clear" Background="{DynamicResource CardBg}" Foreground="{DynamicResource TextSecondary}" Padding="10,4" Margin="0,0,6,0" BorderThickness="0" Click="BtnClear_Click"/>
-                            <Button x:Name="BtnSave" Content="Save" Background="{DynamicResource AccentColor}" Foreground="White" Padding="14,4" BorderThickness="0" Click="BtnSave_Click"/>
-                        </StackPanel>
-
-                        <Separator Background="{DynamicResource BorderColor}" Margin="0,14"/>
-
-                        <!-- Modern Theming Options -->
-                        <TextBlock Text="Theme Preference" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <RadioButton x:Name="RbSystem" Content="System" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0" Checked="RbTheme_Checked"/>
-                            <RadioButton x:Name="RbDark" Content="Dark" Foreground="{DynamicResource TextSecondary}" Margin="0,0,12,0" Checked="RbTheme_Checked"/>
-                            <RadioButton x:Name="RbLight" Content="Light" Foreground="{DynamicResource TextSecondary}" Checked="RbTheme_Checked"/>
-                        </StackPanel>
-
-                        <CheckBox x:Name="ChkAutoStart" Content="Launch with Windows" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,14" Click="ChkAutoStart_Click"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+                        <Button Content="Clear" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextSecondary}" Padding="12,4" Margin="0,0,8,0" BorderThickness="0" Cursor="Hand" Click="BtnClear_Click"/>
+                        <Button x:Name="BtnSave" Content="Save App" Background="{DynamicResource AccentColor}" Foreground="White" FontWeight="SemiBold" Padding="14,4" BorderThickness="0" Cursor="Hand" Click="BtnSave_Click"/>
                     </StackPanel>
-                </ScrollViewer>
-            </Grid>
-        </Grid>
-    </Border>
+
+                    <Separator Background="{DynamicResource BorderColor}" Margin="0,16"/>
+
+                    <!-- Preferences -->
+                    <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                        <RadioButton x:Name="RbSystem" Content="System" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
+                        <RadioButton x:Name="RbDark" Content="Dark" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
+                        <RadioButton x:Name="RbLight" Content="Light" Foreground="{DynamicResource TextSecondary}" Checked="RbTheme_Checked"/>
+                    </StackPanel>
+
+                    <CheckBox x:Name="ChkAutoStart" Content="Start with Windows" Foreground="{DynamicResource TextSecondary}" Click="ChkAutoStart_Click"/>
+
+                    <TextBlock Text="Tip: Closing this window will minimize Mint to the system tray near your clock." 
+                               Foreground="{DynamicResource TextSecondary}" FontSize="11" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </Window>
