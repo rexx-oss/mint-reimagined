@@ -24,6 +24,11 @@ public class AppDisplayItem
 {
     public AppItem App { get; set; } = new();
     public System.Windows.Media.ImageSource? Icon { get; set; }
+
+    // Shows path, with group prefix if one exists
+    public string Subtitle => string.IsNullOrWhiteSpace(App.AppGroup) 
+        ? App.AppLink 
+        : $"{App.AppGroup}  •  {App.AppLink}";
 }
 
 public class InsertionAdorner : Adorner
@@ -229,11 +234,11 @@ public partial class MainWindow : Window
 
         // Exit
         var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
-            {
-                Font = font,
-                ForeColor = foreColor,
-                Padding = new WinForms.Padding(6, 4, 6, 4)
-            };
+        {
+            Font = font,
+            ForeColor = foreColor,
+            Padding = new WinForms.Padding(6, 4, 6, 4)
+        };
         exitItem.Click += (s, e) =>
         {
             _notifyIcon.Visible = false;
@@ -257,7 +262,7 @@ public partial class MainWindow : Window
     {
         e.Cancel = true;
         Hide();
-        TrimMemory(); // Flushes RAM down to ~15-25 MB in the tray
+        TrimMemory();
     }
 
     private void LoadConfig()
@@ -638,7 +643,7 @@ public partial class MainWindow : Window
     private void RemoveInsertionAdorner()
     {
         if (_currentAdornedItem != null && _currentAdorner != null)
-        {
+            {
             var layer = AdornerLayer.GetAdornerLayer(_currentAdornedItem);
             layer?.Remove(_currentAdorner);
             _currentAdorner = null;
