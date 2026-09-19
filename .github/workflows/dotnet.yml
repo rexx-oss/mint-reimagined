@@ -18,7 +18,7 @@ jobs:
       with:
         dotnet-version: 10.0.x
 
-    # 1. Micro version (~300-400 KB)
+    # 1. Micro version
     - name: Build Framework-Dependent (Micro)
       run: >
         dotnet publish Mint.csproj 
@@ -40,7 +40,7 @@ jobs:
         -p:EnableCompressionInSingleFile=true 
         -o ./dist-standalone
 
-    - name: Upload Micro (~400 KB)
+    - name: Upload Micro
       uses: actions/upload-artifact@v4
       with:
         name: Mint-Micro-x64
