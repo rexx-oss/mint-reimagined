@@ -3,13 +3,13 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Startup="Application_Startup">
     <Application.Resources>
-        <SolidColorBrush x:Key="WindowBg" Color="#0F0F12"/>
-        <SolidColorBrush x:Key="CardBg" Color="#18181C"/>
-        <SolidColorBrush x:Key="CardHoverBg" Color="#26262C"/>
-        <SolidColorBrush x:Key="InputBg" Color="#222228"/>
-        <SolidColorBrush x:Key="BorderColor" Color="#2E2E36"/>
-        <SolidColorBrush x:Key="TextPrimary" Color="#F4F4F6"/>
-        <SolidColorBrush x:Key="TextSecondary" Color="#8E8E98"/>
+        <SolidColorBrush x:Key="WindowBg" Color="#101014"/>
+        <SolidColorBrush x:Key="CardBg" Color="#18181D"/>
+        <SolidColorBrush x:Key="CardHoverBg" Color="#24242C"/>
+        <SolidColorBrush x:Key="InputBg" Color="#1E1E25"/>
+        <SolidColorBrush x:Key="BorderColor" Color="#2C2C35"/>
+        <SolidColorBrush x:Key="TextPrimary" Color="#EDEDF0"/>
+        <SolidColorBrush x:Key="TextSecondary" Color="#B8BAC4"/>
         <SolidColorBrush x:Key="AccentColor" Color="#3B82F6"/>
 
         <Style TargetType="TextBox">
@@ -22,6 +22,60 @@
             <Setter Property="SnapsToDevicePixels" Value="True"/>
         </Style>
 
+        <!-- Modern Windows 11 Fluent ScrollBar Style -->
+        <Style x:Key="ModernScrollBarThumb" TargetType="{x:Type Thumb}">
+            <Setter Property="OverridesDefaultStyle" Value="true"/>
+            <Setter Property="IsTabStop" Value="false"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type Thumb}">
+                        <Border x:Name="ThumbBorder"
+                                CornerRadius="4"
+                                Background="{DynamicResource BorderColor}"
+                                Margin="2"/>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="true">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource TextSecondary}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="true">
+                                <Setter TargetName="ThumbBorder" Property="Background" Value="{DynamicResource AccentColor}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style TargetType="{x:Type ScrollBar}">
+            <Setter Property="Stylus.IsPressAndHoldEnabled" Value="false"/>
+            <Setter Property="Stylus.IsFlicksEnabled" Value="false"/>
+            <Setter Property="Width" Value="8"/>
+            <Setter Property="MinWidth" Value="8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ScrollBar}">
+                        <Grid x:Name="Bg" Background="Transparent" SnapsToDevicePixels="true">
+                            <Track x:Name="PART_Track" IsDirectionReversed="true" IsEnabled="{TemplateBinding IsMouseOver}">
+                                <Track.Thumb>
+                                    <Thumb Style="{StaticResource ModernScrollBarThumb}"/>
+                                </Track.Thumb>
+                            </Track>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Orientation" Value="Horizontal">
+                                <Setter Property="Width" Value="Auto"/>
+                                <Setter Property="MinWidth" Value="0"/>
+                                <Setter Property="Height" Value="8"/>
+                                <Setter Property="MinHeight" Value="8"/>
+                                <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Modern In-App Context Menu -->
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource CardBg}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
