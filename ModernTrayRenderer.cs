@@ -25,7 +25,7 @@ namespace Mint
             }
 
             bool isDark = ThemeManager.IsDarkThemeActive;
-            Color hoverColor = isDark ? Color.FromArgb(38, 38, 44) : Color.FromArgb(235, 236, 239);
+            Color hoverColor = isDark ? Color.FromArgb(38, 38, 44) : Color.FromArgb(240, 241, 244);
 
             var rect = new Rectangle(4, 1, e.Item.Width - 8, e.Item.Height - 2);
             using var brush = new SolidBrush(hoverColor);
@@ -37,7 +37,6 @@ namespace Mint
 
         protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
         {
-            // Eradicate the obsolete 3D gutter/white margin
             bool isDark = ThemeManager.IsDarkThemeActive;
             using var brush = new SolidBrush(isDark ? Color.FromArgb(24, 24, 28) : Color.FromArgb(255, 255, 255));
             e.Graphics.FillRectangle(brush, e.AffectedBounds);
