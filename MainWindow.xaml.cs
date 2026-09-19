@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -13,7 +12,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
@@ -24,7 +22,7 @@ namespace Mint
     public class AppDisplayItem
     {
         public AppItem App { get; set; } = new();
-        public ImageSource? Icon { get; set; }
+        public System.Windows.Media.ImageSource? Icon { get; set; }
     }
 
     public class InsertionAdorner : Adorner
@@ -39,12 +37,12 @@ namespace Mint
             _brush = brush;
             _pen = new System.Windows.Media.Pen(brush, 2)
             {
-                DashStyle = DashStyles.Dash
+                DashStyle = System.Windows.Media.DashStyles.Dash
             };
             IsHitTestVisible = false;
         }
 
-        protected override void OnRender(DrawingContext dc)
+        protected override void OnRender(System.Windows.Media.DrawingContext dc)
         {
             double y = IsAfter ? AdornedElement.RenderSize.Height : 0;
             double width = AdornedElement.RenderSize.Width;
@@ -107,35 +105,34 @@ namespace Mint
             BuildTrayContextMenu();
         }
 
-        private Icon LoadMintIcon()
+        private System.Drawing.Icon LoadMintIcon()
         {
             try
             {
                 string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mint.ico");
                 if (File.Exists(iconPath))
                 {
-                    Icon = BitmapFrame.Create(new Uri(iconPath));
-                    return new Icon(iconPath);
+                    this.Icon = BitmapFrame.Create(new Uri(iconPath));
+                    return new System.Drawing.Icon(iconPath);
                 }
-                
+
                 if (Environment.ProcessPath != null)
                 {
-                    var extracted = Icon.ExtractAssociatedIcon(Environment.ProcessPath);
+                    var extracted = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath);
                     if (extracted != null)
                     {
-                        Icon = Imaging.CreateBitmapSourceFromHIcon(extracted.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                        this.Icon = Imaging.CreateBitmapSourceFromHIcon(extracted.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
                         return extracted;
                     }
                 }
             }
             catch { }
 
-            return SystemIcons.Application;
+            return System.Drawing.SystemIcons.Application;
         }
 
         private void InitAutoScroll()
         {
-            // 35ms interval provides a smooth 28fps scrolling animation
             _autoScrollTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(35)
@@ -161,7 +158,7 @@ namespace Mint
             };
 
             bool isDark = ThemeManager.IsDarkThemeActive;
-            var font = new Font("Segoe UI Semibold", 9.5f);
+            var font = new System.Drawing.Font("Segoe UI Semibold", 9.5f);
             var foreColor = isDark ? System.Drawing.Color.FromArgb(237, 237, 240) : System.Drawing.Color.FromArgb(30, 34, 41);
 
             // Grouped apps with submenus
@@ -431,12 +428,13 @@ namespace Mint
                 LaunchApp(item.App);
         }
 
+        // --- Visual Tree Helpers ---
         private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
         {
             while (child != null)
             {
                 if (child is T parent) return parent;
-                child = VisualTreeHelper.GetParent(child);
+                child = System.Windows.Media.VisualTreeHelper.GetParent(child);
             }
             return null;
         }
@@ -444,9 +442,9 @@ namespace Mint
         private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
         {
             if (parent == null) return null;
-            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
             {
-                var child = VisualTreeHelper.GetChild(parent, i);
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
                 if (child is T result) return result;
                 var nested = FindVisualChild<T>(child);
                 if (nested != null) return nested;
@@ -727,89 +725,3 @@ namespace Mint
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(TxtTitle.Text) || string.IsNullOrWhiteSpace(TxtPath.Text))
-            {
-                MessageBox.Show("Please provide a Title and Target path.", "Mint", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-
-            if (_editingApp != null)
-            {
-                _editingApp.AppTitle = TxtTitle.Text.Trim();
-                _editingApp.AppLink = TxtPath.Text.Trim();
-                _editingApp.AppParams = TxtArgs.Text.Trim();
-                _editingApp.AppGroup = TxtGroup.Text.Trim();
-                _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
-                _editingApp = null;
-            }
-            else
-            {
-                _settings.Apps.Add(new AppItem
-                {
-                    AppTitle = TxtTitle.Text.Trim(),
-                    AppLink = TxtPath.Text.Trim(),
-                    AppParams = TxtArgs.Text.Trim(),
-                    AppGroup = TxtGroup.Text.Trim(),
-                    CustomIconPath = TxtCustomIcon.Text.Trim()
-                });
-            }
-
-            SaveConfig();
-            BuildGroupChips();
-            RefreshList();
-            BuildTrayContextMenu();
-            BtnClear_Click(this, new RoutedEventArgs());
-        }
-
-        private void BtnClear_Click(object sender, RoutedEventArgs e)
-        {
-            _editingApp = null;
-            TxtTitle.Clear();
-            TxtPath.Clear();
-            TxtArgs.Clear();
-            TxtGroup.Clear();
-            TxtCustomIcon.Clear();
-            ImgIconPreview.Source = null;
-        }
-
-        private void ChkAutoStart_Click(object sender, RoutedEventArgs e)
-        {
-            _settings.StartWithWindows = ChkAutoStart.IsChecked ?? false;
-            SaveConfig();
-
-            const string runKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-            using var key = Registry.CurrentUser.OpenSubKey(runKey, true);
-            if (key != null)
-            {
-                if (_settings.StartWithWindows)
-                    key.SetValue("MintLauncher", $"\"{Environment.ProcessPath}\" --minimized");
-                else
-                    key.DeleteValue("MintLauncher", false);
-            }
-        }
-
-        private void Window_Drop(object sender, DragEventArgs e)
-        {
-            if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-                if (files?.Length > 0)
-                {
-                    string file = files[0];
-                    string title = Path.GetFileNameWithoutExtension(file);
-                    string path = file;
-                    string args = "";
-
-                    if (file.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
-                        (path, args) = ShortcutHelper.ResolveShortcut(file);
-
-                    _settings.Apps.Add(new AppItem { AppTitle = title, AppLink = path, AppParams = args });
-                    SaveConfig();
-                    BuildGroupChips();
-                    RefreshList();
-                    BuildTrayContextMenu();
-                }
-            }
-        }
-    }
-}
