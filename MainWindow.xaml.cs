@@ -13,6 +13,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 using Point = System.Windows.Point;
 
@@ -24,7 +25,6 @@ namespace Mint
         public ImageSource? Icon { get; set; }
     }
 
-    // Adorner that paints the dashed insertion landing hint during drag
     public class InsertionAdorner : Adorner
     {
         public bool IsAfter { get; set; }
@@ -68,6 +68,11 @@ namespace Mint
         private InsertionAdorner? _currentAdorner;
         private ListBoxItem? _currentAdornedItem;
 
+        // Auto-scroll when dragging near edges
+        private DispatcherTimer? _autoScrollTimer;
+        private double _autoScrollDelta = 0;
+        private ScrollViewer? _listScrollViewer;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -89,12 +94,31 @@ namespace Mint
             };
             _notifyIcon.DoubleClick += (s, e) => ShowAndRestore();
 
+            InitAutoScroll();
             LoadConfig();
             ThemeManager.ApplyTheme(_settings.Theme);
             SyncThemeRadios();
             BuildGroupChips();
             RefreshList();
             BuildTrayContextMenu();
+        }
+
+        private void InitAutoScroll()
+        {
+            _autoScrollTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(25)
+            };
+            _autoScrollTimer.Tick += (s, e) =>
+            {
+                if (_listScrollViewer == null)
+                    _listScrollViewer = FindVisualChild<ScrollViewer>(LstApps);
+
+                if (_listScrollViewer != null && _autoScrollDelta != 0)
+                {
+                    _listScrollViewer.ScrollToVerticalOffset(_listScrollViewer.VerticalOffset + _autoScrollDelta);
+                }
+            };
         }
 
         public void BuildTrayContextMenu()
@@ -107,9 +131,9 @@ namespace Mint
 
             bool isDark = ThemeManager.IsDarkThemeActive;
             var font = new Font("Segoe UI Semibold", 9.5f);
-            var foreColor = isDark ? System.Drawing.Color.FromArgb(228, 228, 231) : System.Drawing.Color.FromArgb(24, 24, 28);
+            var foreColor = isDark ? System.Drawing.Color.FromArgb(237, 237, 240) : System.Drawing.Color.FromArgb(30, 34, 41);
 
-            // Grouped apps
+            // Grouped apps with submenus
             var groups = _settings.Apps
                 .Where(a => !string.IsNullOrWhiteSpace(a.AppGroup))
                 .GroupBy(a => a.AppGroup)
@@ -120,7 +144,8 @@ namespace Mint
                 var groupItem = new WinForms.ToolStripMenuItem(grp.Key)
                 {
                     Font = font,
-                    ForeColor = foreColor
+                    ForeColor = foreColor,
+                    Padding = new WinForms.Padding(6, 4, 6, 4)
                 };
 
                 foreach (var app in grp)
@@ -129,7 +154,8 @@ namespace Mint
                     var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
                     {
                         Font = font,
-                        ForeColor = foreColor
+                        ForeColor = foreColor,
+                        Padding = new WinForms.Padding(6, 4, 6, 4)
                     };
                     item.Click += (s, e) => LaunchApp(app);
                     groupItem.DropDownItems.Add(item);
@@ -148,7 +174,8 @@ namespace Mint
                 var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
                 {
                     Font = font,
-                    ForeColor = foreColor
+                    ForeColor = foreColor,
+                    Padding = new WinForms.Padding(6, 4, 6, 4)
                 };
                 item.Click += (s, e) => LaunchApp(app);
                 menu.Items.Add(item);
@@ -160,7 +187,8 @@ namespace Mint
             var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
             {
                 Font = font,
-                ForeColor = foreColor
+                ForeColor = foreColor,
+                Padding = new WinForms.Padding(6, 4, 6, 4)
             };
             exitItem.Click += (s, e) =>
             {
@@ -303,9 +331,21 @@ namespace Mint
 
             TxtFooterCount.Text = $"{_displayList.Count} of {_settings.Apps.Count} Apps";
 
-            if (_displayList.Count > 0)
+            if (_displayList.Count > 0 && LstApps.SelectedIndex == -1)
                 LstApps.SelectedIndex = 0;
         }
+
+        private async void UpdateEditIconPreview()
+        {
+            string path = TxtCustomIcon.Text.Trim();
+            if (string.IsNullOrWhiteSpace(path)) path = TxtPath.Text.Trim();
+            string title = TxtTitle.Text.Trim();
+
+            ImgIconPreview.Source = await IconHelper.GetIconAsync(path, TxtCustomIcon.Text.Trim(), title);
+        }
+
+        private void TxtPath_TextChanged(object sender, TextChangedEventArgs e) => UpdateEditIconPreview();
+        private void TxtCustomIcon_TextChanged(object sender, TextChangedEventArgs e) => UpdateEditIconPreview();
 
         private void LaunchApp(AppItem app, bool asAdmin = false)
         {
@@ -360,7 +400,7 @@ namespace Mint
                 LaunchApp(item.App);
         }
 
-        // --- Visual Helper ---
+        // --- Visual Tree Helpers ---
         private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
         {
             while (child != null)
@@ -371,12 +411,25 @@ namespace Mint
             return null;
         }
 
-        // --- Drag & Drop: ScrollBar Protection & Insertion Adorner ---
+        private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T result) return result;
+                var nested = FindVisualChild<T>(child);
+                if (nested != null) return nested;
+            }
+            return null;
+        }
+
+        // --- Drag & Drop: Auto-Scroll on Edge & Insertion Adorner ---
         private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             var hit = e.OriginalSource as DependencyObject;
 
-            // Prevent drag when clicking the scrollbar
+            // Do not drag if user is clicking or pulling the scrollbar thumb
             if (FindVisualParent<ScrollBar>(hit) != null)
             {
                 _draggedItem = null;
@@ -409,6 +462,7 @@ namespace Mint
                 }
                 finally
                 {
+                    StopAutoScroll();
                     RemoveInsertionAdorner();
                     _draggedItem = null;
                 }
@@ -420,12 +474,35 @@ namespace Mint
             if (!e.Data.GetDataPresent(typeof(AppDisplayItem)))
             {
                 e.Effects = DragDropEffects.None;
+                StopAutoScroll();
                 RemoveInsertionAdorner();
                 return;
             }
 
             e.Effects = DragDropEffects.Move;
 
+            // 1. Edge-sensing auto-scroll: holding near top or bottom automatically scrolls long lists
+            Point mousePos = e.GetPosition(LstApps);
+            const double edgeThreshold = 35.0;
+
+            if (mousePos.Y >= 0 && mousePos.Y < edgeThreshold)
+            {
+                double speedFactor = (edgeThreshold - mousePos.Y) / edgeThreshold;
+                _autoScrollDelta = -Math.Max(3, speedFactor * 14);
+                if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
+            }
+            else if (mousePos.Y > LstApps.ActualHeight - edgeThreshold && mousePos.Y <= LstApps.ActualHeight)
+            {
+                double speedFactor = (mousePos.Y - (LstApps.ActualHeight - edgeThreshold)) / edgeThreshold;
+                _autoScrollDelta = Math.Max(3, speedFactor * 14);
+                if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
+            }
+            else
+            {
+                StopAutoScroll();
+            }
+
+            // 2. Dotted line insertion hint
             var hit = e.OriginalSource as DependencyObject;
             var targetItem = FindVisualParent<ListBoxItem>(hit);
 
@@ -445,12 +522,21 @@ namespace Mint
         {
             if (!LstApps.IsMouseOver)
             {
+                StopAutoScroll();
                 RemoveInsertionAdorner();
             }
         }
 
+        private void StopAutoScroll()
+        {
+            _autoScrollDelta = 0;
+            if (_autoScrollTimer != null && _autoScrollTimer.IsEnabled)
+                _autoScrollTimer.Stop();
+        }
+
         private void LstApps_Drop(object sender, DragEventArgs e)
         {
+            StopAutoScroll();
             RemoveInsertionAdorner();
 
             if (e.Data.GetData(typeof(AppDisplayItem)) is AppDisplayItem droppedData)
@@ -553,6 +639,7 @@ namespace Mint
                 TxtArgs.Text = item.App.AppParams;
                 TxtGroup.Text = item.App.AppGroup;
                 TxtCustomIcon.Text = item.App.CustomIconPath;
+                UpdateEditIconPreview();
             }
         }
 
@@ -570,7 +657,6 @@ namespace Mint
 
         private void BtnBrowseTarget_Click(object sender, RoutedEventArgs e)
         {
-            // Default to All Files (*.*) so any file, script, or document can be added
             var dlg = new OpenFileDialog
             {
                 Title = "Select Target",
@@ -592,6 +678,7 @@ namespace Mint
                     TxtPath.Text = file;
                     TxtTitle.Text = Path.GetFileNameWithoutExtension(file);
                 }
+                UpdateEditIconPreview();
             }
         }
 
@@ -600,9 +687,13 @@ namespace Mint
             var dlg = new OpenFileDialog
             {
                 Title = "Select Icon",
-                Filter = "All Files (*.*)|*.*|Icons & Images (*.ico;*.png;*.exe)|*.ico;*.png;*.exe"
+                Filter = "Icons & Images (*.ico;*.png;*.exe;*.dll)|*.ico;*.png;*.exe;*.dll|All Files (*.*)|*.*"
             };
-            if (dlg.ShowDialog() == true) TxtCustomIcon.Text = dlg.FileName;
+            if (dlg.ShowDialog() == true)
+            {
+                TxtCustomIcon.Text = dlg.FileName;
+                UpdateEditIconPreview();
+            }
         }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
@@ -649,6 +740,7 @@ namespace Mint
             TxtArgs.Clear();
             TxtGroup.Clear();
             TxtCustomIcon.Clear();
+            ImgIconPreview.Source = null;
         }
 
         private void ChkAutoStart_Click(object sender, RoutedEventArgs e)
