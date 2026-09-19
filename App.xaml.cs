@@ -11,7 +11,7 @@ namespace Mint
 
         private void Application_Startup(object sender, StartupEventArgs e)
         {
-            // Catch all unhandled startup crashes to prevent silent exits
+            // Catches any hidden crashes so a clear dialog is shown
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {
                 MessageBox.Show($"Mint startup error:\n{args.ExceptionObject}", "Mint Error", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -32,7 +32,6 @@ namespace Mint
             }
 
             var mainWindow = new MainWindow();
-            // Opens centered on screen immediately on launch
             mainWindow.Show();
         }
     }
