@@ -29,15 +29,25 @@ namespace Mint
             {
                 try
                 {
-                    if (!File.Exists(sourcePath) && !Directory.Exists(sourcePath))
+                    string target = sourcePath;
+
+                    // Automatically resolve built-in Windows apps
+                    if (!Path.IsPathRooted(target))
+                    {
+                        string systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                        string fullPath = Path.Combine(systemDir, target);
+                        if (File.Exists(fullPath)) target = fullPath;
+                    }
+
+                    if (!File.Exists(target) && !Directory.Exists(target))
                         return null;
 
-                    string ext = Path.GetExtension(sourcePath).ToLowerInvariant();
+                    string ext = Path.GetExtension(target).ToLowerInvariant();
                     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
                     {
                         var bitmap = new BitmapImage();
                         bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(sourcePath);
+                        bitmap.UriSource = new Uri(target);
                         bitmap.CacheOption = BitmapCacheOption.OnLoad;
                         bitmap.DecodePixelWidth = 32;
                         bitmap.EndInit();
@@ -46,7 +56,7 @@ namespace Mint
                         return (ImageSource)bitmap;
                     }
 
-                    using var icon = Icon.ExtractAssociatedIcon(sourcePath);
+                    using var icon = Icon.ExtractAssociatedIcon(target);
                     if (icon == null) return null;
 
                     var bs = Imaging.CreateBitmapSourceFromHIcon(
