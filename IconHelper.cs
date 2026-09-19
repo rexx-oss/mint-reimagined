@@ -14,7 +14,7 @@ namespace Mint
     {
         private static readonly ConcurrentDictionary<string, ImageSource> MemoryCache = new();
 
-        public static async Task<ImageSource?> GetIconAsync(string filePath, string customIconPath, string appTitle)
+        public static async Task<ImageSource?> GetIconAsync(string filePath, string customIconPath)
         {
             string sourcePath = !string.IsNullOrWhiteSpace(customIconPath) && File.Exists(customIconPath)
                 ? customIconPath
