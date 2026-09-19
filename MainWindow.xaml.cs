@@ -9,6 +9,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using WinForms = System.Windows.Forms;
@@ -22,6 +24,35 @@ namespace Mint
         public ImageSource? Icon { get; set; }
     }
 
+    // Adorner that paints the dashed insertion landing hint during drag
+    public class InsertionAdorner : Adorner
+    {
+        public bool IsAfter { get; set; }
+        private readonly System.Windows.Media.Pen _pen;
+        private readonly System.Windows.Media.Brush _brush;
+
+        public InsertionAdorner(UIElement adornedElement, bool isAfter, System.Windows.Media.Brush brush) : base(adornedElement)
+        {
+            IsAfter = isAfter;
+            _brush = brush;
+            _pen = new System.Windows.Media.Pen(brush, 2)
+            {
+                DashStyle = DashStyles.Dash
+            };
+            IsHitTestVisible = false;
+        }
+
+        protected override void OnRender(DrawingContext dc)
+        {
+            double y = IsAfter ? AdornedElement.RenderSize.Height : 0;
+            double width = AdornedElement.RenderSize.Width;
+
+            dc.DrawLine(_pen, new Point(4, y), new Point(width - 4, y));
+            dc.DrawEllipse(_brush, null, new Point(4, y), 3, 3);
+            dc.DrawEllipse(_brush, null, new Point(width - 4, y), 3, 3);
+        }
+    }
+
     public partial class MainWindow : Window
     {
         private readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "apps.json");
@@ -30,7 +61,12 @@ namespace Mint
         private readonly WinForms.NotifyIcon _notifyIcon;
         private AppItem? _editingApp;
         private string _activeGroupFilter = "All";
+
+        // Drag & Drop State
         private Point _dragStartPoint;
+        private AppDisplayItem? _draggedItem;
+        private InsertionAdorner? _currentAdorner;
+        private ListBoxItem? _currentAdornedItem;
 
         public MainWindow()
         {
@@ -44,7 +80,6 @@ namespace Mint
                 Visible = true
             };
 
-            // Left-click restores the manager window; right-click shows the iconic launcher menu!
             _notifyIcon.MouseClick += (s, e) =>
             {
                 if (e.Button == WinForms.MouseButtons.Left)
@@ -72,9 +107,9 @@ namespace Mint
 
             bool isDark = ThemeManager.IsDarkThemeActive;
             var font = new Font("Segoe UI Semibold", 9.5f);
-            var foreColor = isDark ? System.Drawing.Color.FromArgb(244, 244, 246) : System.Drawing.Color.FromArgb(20, 20, 22);
+            var foreColor = isDark ? System.Drawing.Color.FromArgb(228, 228, 231) : System.Drawing.Color.FromArgb(24, 24, 28);
 
-            // 1. Grouped Applications with Submenus
+            // Grouped apps
             var groups = _settings.Apps
                 .Where(a => !string.IsNullOrWhiteSpace(a.AppGroup))
                 .GroupBy(a => a.AppGroup)
@@ -90,7 +125,7 @@ namespace Mint
 
                 foreach (var app in grp)
                 {
-                    var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath);
+                    var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath, app.AppTitle);
                     var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
                     {
                         Font = font,
@@ -105,11 +140,11 @@ namespace Mint
 
             if (groups.Any()) menu.Items.Add(new WinForms.ToolStripSeparator());
 
-            // 2. Ungrouped Applications
+            // Ungrouped apps
             var ungrouped = _settings.Apps.Where(a => string.IsNullOrWhiteSpace(a.AppGroup)).ToList();
             foreach (var app in ungrouped)
             {
-                var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath);
+                var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath, app.AppTitle);
                 var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
                 {
                     Font = font,
@@ -121,15 +156,7 @@ namespace Mint
 
             if (menu.Items.Count > 0) menu.Items.Add(new WinForms.ToolStripSeparator());
 
-            // 3. System Options
-            var openItem = new WinForms.ToolStripMenuItem("Settings", null)
-            {
-                Font = font,
-                ForeColor = foreColor
-            };
-            openItem.Click += (s, e) => ShowAndRestore();
-            menu.Items.Add(openItem);
-
+            // Exit
             var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
             {
                 Font = font,
@@ -190,6 +217,7 @@ namespace Mint
             try
             {
                 File.WriteAllText(ConfigPath, JsonSerializer.Serialize(_settings, new JsonSerializerOptions { WriteIndented = true }));
+                IconHelper.CleanupOrphanedIcons(_settings.Apps.Select(a => a.AppTitle));
             }
             catch { }
         }
@@ -269,7 +297,7 @@ namespace Mint
 
             foreach (var app in query)
             {
-                var icon = await IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath);
+                var icon = await IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle);
                 _displayList.Add(new AppDisplayItem { App = app, Icon = icon });
             }
 
@@ -294,12 +322,14 @@ namespace Mint
 
                 if (File.Exists(app.AppLink))
                     psi.WorkingDirectory = Path.GetDirectoryName(app.AppLink);
+                else if (Directory.Exists(app.AppLink))
+                    psi.WorkingDirectory = app.AppLink;
 
                 Process.Start(psi);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Could not launch app:\n{ex.Message}", "Mint", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Could not launch item:\n{ex.Message}", "Mint", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -330,98 +360,159 @@ namespace Mint
                 LaunchApp(item.App);
         }
 
-        // --- Reordering: Drag & Drop ---
+        // --- Visual Helper ---
+        private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
+        {
+            while (child != null)
+            {
+                if (child is T parent) return parent;
+                child = VisualTreeHelper.GetParent(child);
+            }
+            return null;
+        }
+
+        // --- Drag & Drop: ScrollBar Protection & Insertion Adorner ---
         private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            _dragStartPoint = e.GetPosition(null);
+            var hit = e.OriginalSource as DependencyObject;
+
+            // Prevent drag when clicking the scrollbar
+            if (FindVisualParent<ScrollBar>(hit) != null)
+            {
+                _draggedItem = null;
+                return;
+            }
+
+            var listBoxItem = FindVisualParent<ListBoxItem>(hit);
+            if (listBoxItem != null)
+            {
+                _dragStartPoint = e.GetPosition(null);
+                _draggedItem = listBoxItem.DataContext as AppDisplayItem;
+            }
+            else
+            {
+                _draggedItem = null;
+            }
         }
 
         private void LstApps_MouseMove(object sender, MouseEventArgs e)
         {
+            if (e.LeftButton != MouseButtonState.Pressed || _draggedItem == null) return;
+
             var diff = _dragStartPoint - e.GetPosition(null);
-            if (e.LeftButton == MouseButtonState.Pressed &&
-                (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
-                 Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance))
+            if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
             {
-                if (LstApps.SelectedItem is AppDisplayItem item)
+                try
                 {
-                    DragDrop.DoDragDrop(LstApps, item, DragDropEffects.Move);
+                    DragDrop.DoDragDrop(LstApps, _draggedItem, DragDropEffects.Move);
                 }
+                finally
+                {
+                    RemoveInsertionAdorner();
+                    _draggedItem = null;
+                }
+            }
+        }
+
+        private void LstApps_DragOver(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(typeof(AppDisplayItem)))
+            {
+                e.Effects = DragDropEffects.None;
+                RemoveInsertionAdorner();
+                return;
+            }
+
+            e.Effects = DragDropEffects.Move;
+
+            var hit = e.OriginalSource as DependencyObject;
+            var targetItem = FindVisualParent<ListBoxItem>(hit);
+
+            if (targetItem != null)
+            {
+                Point pos = e.GetPosition(targetItem);
+                bool isAfter = pos.Y > targetItem.ActualHeight / 2;
+                ShowInsertionAdorner(targetItem, isAfter);
+            }
+            else
+            {
+                RemoveInsertionAdorner();
+            }
+        }
+
+        private void LstApps_DragLeave(object sender, DragEventArgs e)
+        {
+            if (!LstApps.IsMouseOver)
+            {
+                RemoveInsertionAdorner();
             }
         }
 
         private void LstApps_Drop(object sender, DragEventArgs e)
         {
+            RemoveInsertionAdorner();
+
             if (e.Data.GetData(typeof(AppDisplayItem)) is AppDisplayItem droppedData)
             {
-                var targetElement = e.OriginalSource as FrameworkElement;
-                var targetItem = targetElement?.DataContext as AppDisplayItem;
+                var hit = e.OriginalSource as DependencyObject;
+                var targetItem = FindVisualParent<ListBoxItem>(hit);
 
-                int oldIndex = _settings.Apps.IndexOf(droppedData.App);
-                int newIndex = targetItem != null ? _settings.Apps.IndexOf(targetItem.App) : _settings.Apps.Count - 1;
-
-                if (oldIndex >= 0 && newIndex >= 0 && oldIndex != newIndex)
+                if (targetItem?.DataContext is AppDisplayItem targetDisplay)
                 {
-                    _settings.Apps.RemoveAt(oldIndex);
-                    _settings.Apps.Insert(newIndex, droppedData.App);
+                    Point pos = e.GetPosition(targetItem);
+                    bool isAfter = pos.Y > targetItem.ActualHeight / 2;
 
-                    SaveConfig();
-                    RefreshList(TxtSearch.Text);
-                    BuildTrayContextMenu();
+                    int oldIndex = _settings.Apps.IndexOf(droppedData.App);
+                    int targetIndex = _settings.Apps.IndexOf(targetDisplay.App);
+
+                    if (oldIndex >= 0 && targetIndex >= 0)
+                    {
+                        if (isAfter && targetIndex < oldIndex) targetIndex++;
+                        else if (!isAfter && targetIndex > oldIndex) targetIndex--;
+
+                        if (oldIndex != targetIndex && targetIndex >= 0 && targetIndex < _settings.Apps.Count)
+                        {
+                            _settings.Apps.RemoveAt(oldIndex);
+                            _settings.Apps.Insert(targetIndex, droppedData.App);
+
+                            SaveConfig();
+                            RefreshList(TxtSearch.Text);
+                            BuildTrayContextMenu();
+
+                            var display = _displayList.FirstOrDefault(d => d.App == droppedData.App);
+                            if (display != null) LstApps.SelectedItem = display;
+                        }
+                    }
                 }
             }
         }
 
-        // --- Reordering: Buttons & Menu ---
-        private void CardMoveUp_Click(object sender, RoutedEventArgs e)
+        private void ShowInsertionAdorner(ListBoxItem item, bool isAfter)
         {
-            if ((sender as FrameworkElement)?.DataContext is AppDisplayItem item)
+            if (_currentAdornedItem == item && _currentAdorner?.IsAfter == isAfter)
+                return;
+
+            RemoveInsertionAdorner();
+
+            var layer = AdornerLayer.GetAdornerLayer(item);
+            if (layer != null)
             {
-                MoveAppIndex(item.App, -1);
+                var brush = (System.Windows.Media.Brush)Application.Current.Resources["AccentColor"];
+                _currentAdorner = new InsertionAdorner(item, isAfter, brush);
+                _currentAdornedItem = item;
+                layer.Add(_currentAdorner);
             }
         }
 
-        private void CardMoveDown_Click(object sender, RoutedEventArgs e)
+        private void RemoveInsertionAdorner()
         {
-            if ((sender as FrameworkElement)?.DataContext is AppDisplayItem item)
+            if (_currentAdornedItem != null && _currentAdorner != null)
             {
-                MoveAppIndex(item.App, 1);
-            }
-        }
-
-        private void MenuMoveUp_Click(object sender, RoutedEventArgs e)
-        {
-            if (LstApps.SelectedItem is AppDisplayItem item)
-            {
-                MoveAppIndex(item.App, -1);
-            }
-        }
-
-        private void MenuMoveDown_Click(object sender, RoutedEventArgs e)
-        {
-            if (LstApps.SelectedItem is AppDisplayItem item)
-            {
-                MoveAppIndex(item.App, 1);
-            }
-        }
-
-        private void MoveAppIndex(AppItem app, int direction)
-        {
-            int index = _settings.Apps.IndexOf(app);
-            int target = index + direction;
-
-            if (index >= 0 && target >= 0 && target < _settings.Apps.Count)
-            {
-                _settings.Apps.RemoveAt(index);
-                _settings.Apps.Insert(target, app);
-
-                SaveConfig();
-                RefreshList(TxtSearch.Text);
-                BuildTrayContextMenu();
-
-                // Keep selected
-                var display = _displayList.FirstOrDefault(d => d.App == app);
-                if (display != null) LstApps.SelectedItem = display;
+                var layer = AdornerLayer.GetAdornerLayer(_currentAdornedItem);
+                layer?.Remove(_currentAdorner);
+                _currentAdorner = null;
+                _currentAdornedItem = null;
             }
         }
 
@@ -438,19 +529,17 @@ namespace Mint
 
         private void MenuLaunch_Click(object sender, RoutedEventArgs e)
         {
-            if (LstApps.SelectedItem is AppDisplayItem item)
-                LaunchApp(item.App);
+            if (LstApps.SelectedItem is AppDisplayItem item) LaunchApp(item.App);
         }
 
         private void MenuRunAsAdmin_Click(object sender, RoutedEventArgs e)
         {
-            if (LstApps.SelectedItem is AppDisplayItem item)
-                LaunchApp(item.App, true);
+            if (LstApps.SelectedItem is AppDisplayItem item) LaunchApp(item.App, true);
         }
 
         private void MenuOpenLocation_Click(object sender, RoutedEventArgs e)
         {
-            if (LstApps.SelectedItem is AppDisplayItem item && File.Exists(item.App.AppLink))
+            if (LstApps.SelectedItem is AppDisplayItem item && (File.Exists(item.App.AppLink) || Directory.Exists(item.App.AppLink)))
                 Process.Start("explorer.exe", $"/select,\"{item.App.AppLink}\"");
         }
 
@@ -481,7 +570,13 @@ namespace Mint
 
         private void BtnBrowseTarget_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog { Title = "Select Target", Filter = "Applications & Shortcuts (*.exe;*.lnk)|*.exe;*.lnk|All Files (*.*)|*.*" };
+            // Default to All Files (*.*) so any file, script, or document can be added
+            var dlg = new OpenFileDialog
+            {
+                Title = "Select Target",
+                Filter = "All Files (*.*)|*.*|Programs & Shortcuts (*.exe;*.lnk)|*.exe;*.lnk"
+            };
+
             if (dlg.ShowDialog() == true)
             {
                 string file = dlg.FileName;
@@ -502,7 +597,11 @@ namespace Mint
 
         private void BtnBrowseIcon_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new OpenFileDialog { Title = "Select Icon", Filter = "Icons & Images (*.ico;*.png;*.exe)|*.ico;*.png;*.exe|All (*.*)|*.*" };
+            var dlg = new OpenFileDialog
+            {
+                Title = "Select Icon",
+                Filter = "All Files (*.*)|*.*|Icons & Images (*.ico;*.png;*.exe)|*.ico;*.png;*.exe"
+            };
             if (dlg.ShowDialog() == true) TxtCustomIcon.Text = dlg.FileName;
         }
 
@@ -562,7 +661,7 @@ namespace Mint
             if (key != null)
             {
                 if (_settings.StartWithWindows)
-                    key.SetValue("MintLauncher", $"\"{Environment.ProcessPath}\"");
+                    key.SetValue("MintLauncher", $"\"{Environment.ProcessPath}\" --minimized");
                 else
                     key.DeleteValue("MintLauncher", false);
             }
