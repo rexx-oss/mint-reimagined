@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Imaging;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -14,6 +16,22 @@ namespace Mint
     {
         private static readonly ConcurrentDictionary<string, ImageSource> WpfCache = new();
         private static readonly ConcurrentDictionary<string, System.Drawing.Image> GdiCache = new();
+        private static readonly string CacheDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icon_cache");
+
+        static IconHelper()
+        {
+            try
+            {
+                if (!Directory.Exists(CacheDir)) Directory.CreateDirectory(CacheDir);
+            }
+            catch { }
+        }
+
+        private static string GetSafeDiskFileName(string appTitle)
+        {
+            string safe = string.Join("_", appTitle.Split(Path.GetInvalidFileNameChars()));
+            return Path.Combine(CacheDir, safe + ".png");
+        }
 
         private static string ResolveTargetPath(string sourcePath)
         {
@@ -27,7 +45,7 @@ namespace Mint
             return target;
         }
 
-        public static async Task<ImageSource?> GetIconAsync(string filePath, string customIconPath)
+        public static async Task<ImageSource?> GetIconAsync(string filePath, string customIconPath, string appTitle)
         {
             string sourcePath = !string.IsNullOrWhiteSpace(customIconPath) && File.Exists(customIconPath)
                 ? customIconPath
@@ -42,25 +60,46 @@ namespace Mint
             {
                 try
                 {
+                    string diskPath = GetSafeDiskFileName(appTitle);
+
+                    // 1. Check disk cache first
+                    if (File.Exists(diskPath))
+                    {
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(diskPath);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        WpfCache[sourcePath] = bmp;
+                        return (ImageSource)bmp;
+                    }
+
+                    // 2. Extract and persist to disk cache
                     string target = ResolveTargetPath(sourcePath);
                     if (!File.Exists(target) && !Directory.Exists(target)) return null;
 
                     string ext = Path.GetExtension(target).ToLowerInvariant();
-                    if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
+                    if (ext is ".png" or ".jpg" or ".jpeg" or ".bmp")
                     {
-                        var bitmap = new BitmapImage();
-                        bitmap.BeginInit();
-                        bitmap.UriSource = new Uri(target);
-                        bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                        bitmap.DecodePixelWidth = 32;
-                        bitmap.EndInit();
-                        bitmap.Freeze();
-                        WpfCache[sourcePath] = bitmap;
-                        return (ImageSource)bitmap;
+                        var bmp = new BitmapImage();
+                        bmp.BeginInit();
+                        bmp.UriSource = new Uri(target);
+                        bmp.CacheOption = BitmapCacheOption.OnLoad;
+                        bmp.DecodePixelWidth = 32;
+                        bmp.EndInit();
+                        bmp.Freeze();
+                        WpfCache[sourcePath] = bmp;
+                        return (ImageSource)bmp;
                     }
 
                     using var icon = Icon.ExtractAssociatedIcon(target);
                     if (icon == null) return null;
+
+                    using (var bitmap = icon.ToBitmap())
+                    {
+                        try { bitmap.Save(diskPath, ImageFormat.Png); } catch { }
+                    }
 
                     var bs = Imaging.CreateBitmapSourceFromHIcon(
                         icon.Handle,
@@ -75,7 +114,7 @@ namespace Mint
             });
         }
 
-        public static System.Drawing.Image? GetGdiIcon(string filePath, string customIconPath)
+        public static System.Drawing.Image? GetGdiIcon(string filePath, string customIconPath, string appTitle)
         {
             string sourcePath = !string.IsNullOrWhiteSpace(customIconPath) && File.Exists(customIconPath)
                 ? customIconPath
@@ -88,17 +127,18 @@ namespace Mint
 
             try
             {
-                string target = ResolveTargetPath(sourcePath);
-                if (!File.Exists(target) && !Directory.Exists(target)) return null;
-
-                string ext = Path.GetExtension(target).ToLowerInvariant();
-                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
+                string diskPath = GetSafeDiskFileName(appTitle);
+                if (File.Exists(diskPath))
                 {
-                    using var img = System.Drawing.Image.FromFile(target);
+                    using var stream = new FileStream(diskPath, FileMode.Open, FileAccess.Read);
+                    var img = System.Drawing.Image.FromStream(stream);
                     var scaled = new Bitmap(img, new System.Drawing.Size(16, 16));
                     GdiCache[sourcePath] = scaled;
                     return scaled;
                 }
+
+                string target = ResolveTargetPath(sourcePath);
+                if (!File.Exists(target) && !Directory.Exists(target)) return null;
 
                 using var icon = Icon.ExtractAssociatedIcon(target);
                 if (icon != null)
@@ -112,6 +152,28 @@ namespace Mint
             catch { }
 
             return null;
+        }
+
+        public static void CleanupOrphanedIcons(IEnumerable<string> activeTitles)
+        {
+            try
+            {
+                if (!Directory.Exists(CacheDir)) return;
+                var validFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var title in activeTitles)
+                {
+                    validFiles.Add(Path.GetFileName(GetSafeDiskFileName(title)));
+                }
+
+                foreach (var file in Directory.GetFiles(CacheDir, "*.png"))
+                {
+                    if (!validFiles.Contains(Path.GetFileName(file)))
+                    {
+                        try { File.Delete(file); } catch { }
+                    }
+                }
+            }
+            catch { }
         }
     }
 }
