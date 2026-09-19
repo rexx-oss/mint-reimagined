@@ -23,24 +23,26 @@ namespace Mint
 
             if (useDark)
             {
-                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#0F0F12"));
-                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#18181C"));
-                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#26262C"));
-                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#222228"));
-                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2E2E36"));
-                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F4F4F6"));
-                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8E8E98"));
+                // Modern Charcoal Dark (Muted, Zero harsh contrast)
+                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#101014"));
+                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#18181D"));
+                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#24242C"));
+                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E1E25"));
+                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2C2C35"));
+                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EDEDF0"));
+                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8B8B98"));
                 res["AccentColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#3B82F6"));
             }
             else
             {
-                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F5F5F7"));
-                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFFF"));
-                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EBECEF"));
-                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F0F1F4"));
-                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#DCDDE2"));
-                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#141416"));
-                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#6B6B76"));
+                // Eye-Friendly Soft Light (Warm Slate, No blinding pure #FFFFFF)
+                res["WindowBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#EBECEF"));
+                res["CardBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#F4F5F7"));
+                res["CardHoverBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E5E7EB"));
+                res["InputBg"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#E8EAEF"));
+                res["BorderColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#D2D5DC"));
+                res["TextPrimary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#1E2229"));
+                res["TextSecondary"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#606773"));
                 res["AccentColor"] = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#2563EB"));
             }
         }
