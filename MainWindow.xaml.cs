@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -11,6 +12,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using WinForms = System.Windows.Forms;
+using Point = System.Windows.Point;
 
 namespace Mint
 {
@@ -28,6 +30,7 @@ namespace Mint
         private readonly WinForms.NotifyIcon _notifyIcon;
         private AppItem? _editingApp;
         private string _activeGroupFilter = "All";
+        private Point _dragStartPoint;
 
         public MainWindow()
         {
@@ -40,6 +43,8 @@ namespace Mint
                 Text = "Mint Launcher",
                 Visible = true
             };
+
+            // Left-click restores the manager window; right-click shows the iconic launcher menu!
             _notifyIcon.MouseClick += (s, e) =>
             {
                 if (e.Button == WinForms.MouseButtons.Left)
@@ -47,26 +52,89 @@ namespace Mint
                     ShowAndRestore();
                 }
             };
-
-            BuildTrayContextMenu();
+            _notifyIcon.DoubleClick += (s, e) => ShowAndRestore();
 
             LoadConfig();
             ThemeManager.ApplyTheme(_settings.Theme);
             SyncThemeRadios();
             BuildGroupChips();
             RefreshList();
+            BuildTrayContextMenu();
         }
 
-        private void BuildTrayContextMenu()
+        public void BuildTrayContextMenu()
         {
-            var menu = new WinForms.ContextMenuStrip();
-            var openItem = new WinForms.ToolStripMenuItem("Open Mint");
+            var menu = new WinForms.ContextMenuStrip
+            {
+                Renderer = new ModernTrayRenderer(),
+                ShowImageMargin = true
+            };
+
+            bool isDark = ThemeManager.IsDarkThemeActive;
+            var font = new Font("Segoe UI Semibold", 9.5f);
+            var foreColor = isDark ? System.Drawing.Color.FromArgb(244, 244, 246) : System.Drawing.Color.FromArgb(20, 20, 22);
+
+            // 1. Grouped Applications with Submenus
+            var groups = _settings.Apps
+                .Where(a => !string.IsNullOrWhiteSpace(a.AppGroup))
+                .GroupBy(a => a.AppGroup)
+                .OrderBy(g => g.Key);
+
+            foreach (var grp in groups)
+            {
+                var groupItem = new WinForms.ToolStripMenuItem(grp.Key)
+                {
+                    Font = font,
+                    ForeColor = foreColor
+                };
+
+                foreach (var app in grp)
+                {
+                    var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath);
+                    var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
+                    {
+                        Font = font,
+                        ForeColor = foreColor
+                    };
+                    item.Click += (s, e) => LaunchApp(app);
+                    groupItem.DropDownItems.Add(item);
+                }
+
+                menu.Items.Add(groupItem);
+            }
+
+            if (groups.Any()) menu.Items.Add(new WinForms.ToolStripSeparator());
+
+            // 2. Ungrouped Applications
+            var ungrouped = _settings.Apps.Where(a => string.IsNullOrWhiteSpace(a.AppGroup)).ToList();
+            foreach (var app in ungrouped)
+            {
+                var icon = IconHelper.GetGdiIcon(app.AppLink, app.CustomIconPath);
+                var item = new WinForms.ToolStripMenuItem(app.AppTitle, icon)
+                {
+                    Font = font,
+                    ForeColor = foreColor
+                };
+                item.Click += (s, e) => LaunchApp(app);
+                menu.Items.Add(item);
+            }
+
+            if (menu.Items.Count > 0) menu.Items.Add(new WinForms.ToolStripSeparator());
+
+            // 3. System Options
+            var openItem = new WinForms.ToolStripMenuItem("Settings", null)
+            {
+                Font = font,
+                ForeColor = foreColor
+            };
             openItem.Click += (s, e) => ShowAndRestore();
             menu.Items.Add(openItem);
 
-            menu.Items.Add(new WinForms.ToolStripSeparator());
-
-            var exitItem = new WinForms.ToolStripMenuItem("Exit");
+            var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
+            {
+                Font = font,
+                ForeColor = foreColor
+            };
             exitItem.Click += (s, e) =>
             {
                 _notifyIcon.Visible = false;
@@ -88,7 +156,6 @@ namespace Mint
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
-            // Minimize to tray instead of quitting
             e.Cancel = true;
             Hide();
         }
@@ -104,7 +171,6 @@ namespace Mint
             }
             catch { _settings = new AppSettings(); }
 
-            // Preload default tools on first run so the list is never blank
             if (_settings.Apps.Count == 0)
             {
                 _settings.Apps = new List<AppItem>
@@ -144,6 +210,7 @@ namespace Mint
             ThemeManager.ApplyTheme(_settings.Theme);
             SaveConfig();
             BuildGroupChips();
+            BuildTrayContextMenu();
         }
 
         private void BuildGroupChips()
@@ -169,11 +236,11 @@ namespace Mint
                     FontWeight = FontWeights.SemiBold,
                     Cursor = Cursors.Hand,
                     Background = (group == _activeGroupFilter) 
-                        ? (Brush)Application.Current.Resources["AccentColor"] 
-                        : (Brush)Application.Current.Resources["InputBg"],
+                        ? (System.Windows.Media.Brush)Application.Current.Resources["AccentColor"] 
+                        : (System.Windows.Media.Brush)Application.Current.Resources["InputBg"],
                     Foreground = (group == _activeGroupFilter) 
-                        ? Brushes.White 
-                        : (Brush)Application.Current.Resources["TextSecondary"],
+                        ? System.Windows.Media.Brushes.White 
+                        : (System.Windows.Media.Brush)Application.Current.Resources["TextSecondary"],
                     BorderThickness = new Thickness(0)
                 };
 
@@ -263,6 +330,112 @@ namespace Mint
                 LaunchApp(item.App);
         }
 
+        // --- Reordering: Drag & Drop ---
+        private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(null);
+        }
+
+        private void LstApps_MouseMove(object sender, MouseEventArgs e)
+        {
+            var diff = _dragStartPoint - e.GetPosition(null);
+            if (e.LeftButton == MouseButtonState.Pressed &&
+                (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                 Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance))
+            {
+                if (LstApps.SelectedItem is AppDisplayItem item)
+                {
+                    DragDrop.DoDragDrop(LstApps, item, DragDropEffects.Move);
+                }
+            }
+        }
+
+        private void LstApps_Drop(object sender, DragEventArgs e)
+        {
+            if (e.Data.GetData(typeof(AppDisplayItem)) is AppDisplayItem droppedData)
+            {
+                var targetElement = e.OriginalSource as FrameworkElement;
+                var targetItem = targetElement?.DataContext as AppDisplayItem;
+
+                int oldIndex = _settings.Apps.IndexOf(droppedData.App);
+                int newIndex = targetItem != null ? _settings.Apps.IndexOf(targetItem.App) : _settings.Apps.Count - 1;
+
+                if (oldIndex >= 0 && newIndex >= 0 && oldIndex != newIndex)
+                {
+                    _settings.Apps.RemoveAt(oldIndex);
+                    _settings.Apps.Insert(newIndex, droppedData.App);
+
+                    SaveConfig();
+                    RefreshList(TxtSearch.Text);
+                    BuildTrayContextMenu();
+                }
+            }
+        }
+
+        // --- Reordering: Buttons & Menu ---
+        private void CardMoveUp_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is AppDisplayItem item)
+            {
+                MoveAppIndex(item.App, -1);
+            }
+        }
+
+        private void CardMoveDown_Click(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is AppDisplayItem item)
+            {
+                MoveAppIndex(item.App, 1);
+            }
+        }
+
+        private void MenuMoveUp_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstApps.SelectedItem is AppDisplayItem item)
+            {
+                MoveAppIndex(item.App, -1);
+            }
+        }
+
+        private void MenuMoveDown_Click(object sender, RoutedEventArgs e)
+        {
+            if (LstApps.SelectedItem is AppDisplayItem item)
+            {
+                MoveAppIndex(item.App, 1);
+            }
+        }
+
+        private void MoveAppIndex(AppItem app, int direction)
+        {
+            int index = _settings.Apps.IndexOf(app);
+            int target = index + direction;
+
+            if (index >= 0 && target >= 0 && target < _settings.Apps.Count)
+            {
+                _settings.Apps.RemoveAt(index);
+                _settings.Apps.Insert(target, app);
+
+                SaveConfig();
+                RefreshList(TxtSearch.Text);
+                BuildTrayContextMenu();
+
+                // Keep selected
+                var display = _displayList.FirstOrDefault(d => d.App == app);
+                if (display != null) LstApps.SelectedItem = display;
+            }
+        }
+
+        private void BtnSortAZ_Click(object sender, RoutedEventArgs e)
+        {
+            if (MessageBox.Show("Sort all apps alphabetically from A to Z?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+            {
+                _settings.Apps = _settings.Apps.OrderBy(a => a.AppTitle).ToList();
+                SaveConfig();
+                RefreshList(TxtSearch.Text);
+                BuildTrayContextMenu();
+            }
+        }
+
         private void MenuLaunch_Click(object sender, RoutedEventArgs e)
         {
             if (LstApps.SelectedItem is AppDisplayItem item)
@@ -302,6 +475,7 @@ namespace Mint
                 SaveConfig();
                 BuildGroupChips();
                 RefreshList(TxtSearch.Text);
+                BuildTrayContextMenu();
             }
         }
 
@@ -364,6 +538,7 @@ namespace Mint
             SaveConfig();
             BuildGroupChips();
             RefreshList();
+            BuildTrayContextMenu();
             BtnClear_Click(this, new RoutedEventArgs());
         }
 
@@ -412,6 +587,7 @@ namespace Mint
                     SaveConfig();
                     BuildGroupChips();
                     RefreshList();
+                    BuildTrayContextMenu();
                 }
             }
         }
