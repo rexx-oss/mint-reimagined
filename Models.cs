@@ -24,7 +24,6 @@ namespace Mint
     {
         public AppTheme Theme { get; set; } = AppTheme.System;
         public bool StartWithWindows { get; set; } = false;
-        public List<string> Groups { get; set; } = new();
         public List<AppItem> Apps { get; set; } = new();
     }
 }
