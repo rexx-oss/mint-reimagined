@@ -12,7 +12,20 @@ namespace Mint
 {
     public static class IconHelper
     {
-        private static readonly ConcurrentDictionary<string, ImageSource> MemoryCache = new();
+        private static readonly ConcurrentDictionary<string, ImageSource> WpfCache = new();
+        private static readonly ConcurrentDictionary<string, System.Drawing.Image> GdiCache = new();
+
+        private static string ResolveTargetPath(string sourcePath)
+        {
+            string target = sourcePath;
+            if (!Path.IsPathRooted(target))
+            {
+                string systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
+                string fullPath = Path.Combine(systemDir, target);
+                if (File.Exists(fullPath)) target = fullPath;
+            }
+            return target;
+        }
 
         public static async Task<ImageSource?> GetIconAsync(string filePath, string customIconPath)
         {
@@ -22,25 +35,15 @@ namespace Mint
 
             if (string.IsNullOrWhiteSpace(sourcePath)) return null;
 
-            if (MemoryCache.TryGetValue(sourcePath, out var cached))
+            if (WpfCache.TryGetValue(sourcePath, out var cached))
                 return cached;
 
             return await Task.Run(() =>
             {
                 try
                 {
-                    string target = sourcePath;
-
-                    // Automatically resolve built-in Windows apps
-                    if (!Path.IsPathRooted(target))
-                    {
-                        string systemDir = Environment.GetFolderPath(Environment.SpecialFolder.System);
-                        string fullPath = Path.Combine(systemDir, target);
-                        if (File.Exists(fullPath)) target = fullPath;
-                    }
-
-                    if (!File.Exists(target) && !Directory.Exists(target))
-                        return null;
+                    string target = ResolveTargetPath(sourcePath);
+                    if (!File.Exists(target) && !Directory.Exists(target)) return null;
 
                     string ext = Path.GetExtension(target).ToLowerInvariant();
                     if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
@@ -52,7 +55,7 @@ namespace Mint
                         bitmap.DecodePixelWidth = 32;
                         bitmap.EndInit();
                         bitmap.Freeze();
-                        MemoryCache[sourcePath] = bitmap;
+                        WpfCache[sourcePath] = bitmap;
                         return (ImageSource)bitmap;
                     }
 
@@ -65,14 +68,50 @@ namespace Mint
                         BitmapSizeOptions.FromWidthAndHeight(32, 32));
                     bs.Freeze();
 
-                    MemoryCache[sourcePath] = bs;
+                    WpfCache[sourcePath] = bs;
                     return bs;
                 }
-                catch
-                {
-                    return null;
-                }
+                catch { return null; }
             });
+        }
+
+        public static System.Drawing.Image? GetGdiIcon(string filePath, string customIconPath)
+        {
+            string sourcePath = !string.IsNullOrWhiteSpace(customIconPath) && File.Exists(customIconPath)
+                ? customIconPath
+                : filePath;
+
+            if (string.IsNullOrWhiteSpace(sourcePath)) return null;
+
+            if (GdiCache.TryGetValue(sourcePath, out var cached))
+                return cached;
+
+            try
+            {
+                string target = ResolveTargetPath(sourcePath);
+                if (!File.Exists(target) && !Directory.Exists(target)) return null;
+
+                string ext = Path.GetExtension(target).ToLowerInvariant();
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".bmp")
+                {
+                    using var img = System.Drawing.Image.FromFile(target);
+                    var scaled = new Bitmap(img, new System.Drawing.Size(16, 16));
+                    GdiCache[sourcePath] = scaled;
+                    return scaled;
+                }
+
+                using var icon = Icon.ExtractAssociatedIcon(target);
+                if (icon != null)
+                {
+                    using var bmp = icon.ToBitmap();
+                    var scaled = new Bitmap(bmp, new System.Drawing.Size(16, 16));
+                    GdiCache[sourcePath] = scaled;
+                    return scaled;
+                }
+            }
+            catch { }
+
+            return null;
         }
     }
 }
