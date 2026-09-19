@@ -13,13 +13,13 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Setup .NET
+    - name: Setup .NET 10
       uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 10.0.x
 
-    # 1. Build the ultra-lightweight ~400 KB version
-    - name: Build Framework-Dependent (Micro Size ~400KB)
+    # 1. Micro version (~300-400 KB)
+    - name: Build Framework-Dependent (Micro)
       run: >
         dotnet publish Mint.csproj 
         -c Release 
@@ -28,24 +28,25 @@ jobs:
         -p:PublishSingleFile=true 
         -o ./dist-micro
 
-    # 2. Build the self-contained version (for PCs without .NET installed)
-    - name: Build Self-Contained (All-In-One)
+    # 2. Standalone version (runs on any PC without .NET installed)
+    - name: Build Standalone
       run: >
         dotnet publish Mint.csproj 
         -c Release 
         -r win-x64 
         --self-contained true 
         -p:PublishSingleFile=true 
+        -p:IncludeNativeLibrariesForSelfExtract=true 
         -p:EnableCompressionInSingleFile=true 
         -o ./dist-standalone
 
-    - name: Upload Micro Size (~400 KB)
+    - name: Upload Micro (~400 KB)
       uses: actions/upload-artifact@v4
       with:
-        name: Mint-Micro-x64 (Under 1MB)
+        name: Mint-Micro-x64
         path: ./dist-micro/Mint.exe
 
-    - name: Upload Standalone Version
+    - name: Upload Standalone
       uses: actions/upload-artifact@v4
       with:
         name: Mint-Standalone-x64
