@@ -2,6 +2,14 @@ name: Build Mint Launcher
 
 on:
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release version v0.1.0'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -38,14 +46,21 @@ jobs:
         -p:EnableCompressionInSingleFile=true 
         -o ./dist-standalone
 
-    - name: Upload Micro
-      uses: actions/upload-artifact@v4
-      with:
-        name: Mint-Micro-x64
-        path: ./dist-micro/Mint.exe
+    # Rename executables so both can be attached to the release
+    - name: Prepare Release Files
+      run: |
+        Move-Item ./dist-standalone/Mint.exe ./dist-standalone/Mint-Standalone-x64.exe
+        Move-Item ./dist-micro/Mint.exe ./dist-micro/Mint-Micro-x64.exe
 
-    - name: Upload Standalone
-      uses: actions/upload-artifact@v4
+    # Directly publishes to your repository's Releases page
+    - name: Publish to GitHub Releases
+      uses: softprops/action-gh-release@v2
       with:
-        name: Mint-Standalone-x64
-        path: ./dist-standalone/Mint.exe
+        tag_name: ${{ inputs.tag_name }}
+        name: Mint Launcher ${{ inputs.tag_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          ./dist-standalone/Mint-Standalone-x64.exe
+          ./dist-micro/Mint-Micro-x64.exe
