@@ -1,8 +1,6 @@
 # Mint Launcher
 A lightweight, modern Windows app launcher living in your system tray. Reimagined and vibe-coded with Google Gemini, based on the original project by [hellzerg/mint](https://github.com/hellzerg/mint).
 
-<br>
-
 ## Features
 - Boots silently to the system tray using ~15–20 MB RAM.
 - Right-click taskbar menu to launch grouped apps with custom icons.
@@ -11,14 +9,10 @@ A lightweight, modern Windows app launcher living in your system tray. Reimagine
 - Launch executables, shortcuts, scripts, documents, or URLs.
 - Persistent local icon caching for instant loading.
 
-<br>
-
 ## Usage
 - **Right-click tray icon:** Opens your launcher menu.
 - **Double-click tray icon:** Opens or restores the configuration window.
 - **Drag files into window:** Adds apps or reorders them.
-
-<br>
 
 ## Build from Source
 ### Prerequisites
@@ -36,8 +30,6 @@ dotnet publish Mint.csproj -c Release -r win-x64 --self-contained false -p:Publi
 ```
 
 You can also trigger builds on demand via the **Actions** tab on GitHub.
-
-<br>
 
 ## Credits
 - Original concept by [hellzerg](https://github.com/hellzerg/mint).
