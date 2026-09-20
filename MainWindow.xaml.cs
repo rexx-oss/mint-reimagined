@@ -96,13 +96,7 @@ public partial class MainWindow : Window
             Visible = true
         };
 
-        _notifyIcon.MouseClick += (s, e) =>
-        {
-            if (e.Button == WinForms.MouseButtons.Left)
-            {
-                ShowAndRestore();
-            }
-        };
+        // Window ONLY opens when double-clicking the tray icon
         _notifyIcon.DoubleClick += (s, e) => ShowAndRestore();
 
         InitAutoScroll();
@@ -112,6 +106,9 @@ public partial class MainWindow : Window
         BuildGroupChips();
         RefreshList();
         BuildTrayContextMenu();
+
+        // Flush memory immediately so startup RAM in tray is ~15-20 MB
+        TrimMemory();
     }
 
     public static void TrimMemory()
@@ -287,6 +284,8 @@ public partial class MainWindow : Window
             SaveConfig();
         }
 
+        // Validate and ensure registry is in sync with clean path (no flags)
+        ApplyAutoStart(_settings.StartWithWindows);
         ChkAutoStart.IsChecked = _settings.StartWithWindows;
     }
 
@@ -643,7 +642,7 @@ public partial class MainWindow : Window
     private void RemoveInsertionAdorner()
     {
         if (_currentAdornedItem != null && _currentAdorner != null)
-            {
+        {
             var layer = AdornerLayer.GetAdornerLayer(_currentAdornedItem);
             layer?.Remove(_currentAdorner);
             _currentAdorner = null;
@@ -792,20 +791,45 @@ public partial class MainWindow : Window
         ImgIconPreview.Source = null;
     }
 
+    // Clean registry write: checks first, no flags needed since app always boots to tray
+    private void ApplyAutoStart(bool enable)
+    {
+        try
+        {
+            const string runKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
+            using var key = Registry.CurrentUser.OpenSubKey(runKey, true);
+            if (key == null) return;
+
+            string? currentVal = key.GetValue("MintLauncher") as string;
+
+            if (enable)
+            {
+                if (!string.IsNullOrEmpty(Environment.ProcessPath))
+                {
+                    string expectedVal = $"\"{Environment.ProcessPath}\"";
+                    if (!string.Equals(currentVal, expectedVal, StringComparison.OrdinalIgnoreCase))
+                    {
+                        key.SetValue("MintLauncher", expectedVal);
+                    }
+                }
+            }
+            else
+            {
+                if (currentVal != null)
+                {
+                    key.DeleteValue("MintLauncher", false);
+                }
+            }
+        }
+        catch { }
+    }
+
     private void ChkAutoStart_Click(object sender, RoutedEventArgs e)
     {
-        _settings.StartWithWindows = ChkAutoStart.IsChecked ?? false;
+        bool enable = ChkAutoStart.IsChecked ?? false;
+        _settings.StartWithWindows = enable;
         SaveConfig();
-
-        const string runKey = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run";
-        using var key = Registry.CurrentUser.OpenSubKey(runKey, true);
-        if (key != null)
-        {
-            if (_settings.StartWithWindows)
-                key.SetValue("MintLauncher", $"\"{Environment.ProcessPath}\" --minimized");
-            else
-                key.DeleteValue("MintLauncher", false);
-        }
+        ApplyAutoStart(enable);
     }
 
     private void Window_Drop(object sender, DragEventArgs e)
