@@ -87,6 +87,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         LstApps.ItemsSource = _displayList;
 
+        // Adaptive display scaling: adjusts dimensions proportionally to any monitor (768p, 1080p, 1440p, 4K)
+        AdaptToScreenResolution();
+
         // Load Mint icon for both window and system tray
         var appIcon = LoadMintIcon();
         _notifyIcon = new WinForms.NotifyIcon
@@ -109,6 +112,24 @@ public partial class MainWindow : Window
 
         // Flush memory immediately so startup RAM in tray is ~15-20 MB
         TrimMemory();
+    }
+
+    private void AdaptToScreenResolution()
+    {
+        var workArea = SystemParameters.WorkArea;
+
+        // Proportional window size: ~55% of display width, ~65% of display height
+        double targetWidth = Math.Clamp(workArea.Width * 0.55, 820, 1280);
+        double targetHeight = Math.Clamp(workArea.Height * 0.65, 540, 850);
+
+        this.Width = targetWidth;
+        this.Height = targetHeight;
+
+        // Safe boundaries so window never collapses or overflows on any monitor
+        this.MinWidth = Math.Min(720, workArea.Width * 0.9);
+        this.MinHeight = Math.Min(490, workArea.Height * 0.9);
+        this.MaxWidth = workArea.Width;
+        this.MaxHeight = workArea.Height;
     }
 
     public static void TrimMemory()
@@ -754,7 +775,6 @@ public partial class MainWindow : Window
 
         if (_editingApp != null)
         {
-            // Invalidate cache for previous and new title so icons refresh immediately
             IconHelper.InvalidateCache(_editingApp.AppTitle);
             IconHelper.InvalidateCache(TxtTitle.Text.Trim());
 
