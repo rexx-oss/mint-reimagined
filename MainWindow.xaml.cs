@@ -284,7 +284,6 @@ public partial class MainWindow : Window
             SaveConfig();
         }
 
-        // Validate and ensure registry is in sync with clean path (no flags)
         ApplyAutoStart(_settings.StartWithWindows);
         ChkAutoStart.IsChecked = _settings.StartWithWindows;
     }
@@ -695,6 +694,7 @@ public partial class MainWindow : Window
     {
         if (LstApps.SelectedItem is AppDisplayItem item)
         {
+            IconHelper.InvalidateCache(item.App.AppTitle);
             _settings.Apps.Remove(item.App);
             SaveConfig();
             BuildGroupChips();
@@ -754,6 +754,10 @@ public partial class MainWindow : Window
 
         if (_editingApp != null)
         {
+            // Invalidate cache for previous and new title so icons refresh immediately
+            IconHelper.InvalidateCache(_editingApp.AppTitle);
+            IconHelper.InvalidateCache(TxtTitle.Text.Trim());
+
             _editingApp.AppTitle = TxtTitle.Text.Trim();
             _editingApp.AppLink = TxtPath.Text.Trim();
             _editingApp.AppParams = TxtArgs.Text.Trim();
@@ -763,6 +767,8 @@ public partial class MainWindow : Window
         }
         else
         {
+            IconHelper.InvalidateCache(TxtTitle.Text.Trim());
+
             _settings.Apps.Add(new AppItem
             {
                 AppTitle = TxtTitle.Text.Trim(),
@@ -791,7 +797,6 @@ public partial class MainWindow : Window
         ImgIconPreview.Source = null;
     }
 
-    // Clean registry write: checks first, no flags needed since app always boots to tray
     private void ApplyAutoStart(bool enable)
     {
         try
