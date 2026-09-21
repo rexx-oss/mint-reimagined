@@ -1,8 +1,7 @@
 <Window x:Class="Mint.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Mint Launcher" Width="780" Height="570"
-        MinWidth="700" MinHeight="500"
+        Title="Mint Launcher"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource WindowBg}"
         Foreground="{DynamicResource TextPrimary}"
@@ -13,12 +12,17 @@
 
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="440"/>
-            <ColumnDefinition Width="16"/>
-            <ColumnDefinition Width="*"/>
+            <!-- Elastic Left: Content (Apps list) gets priority and stretches with the window on 1440p/4K -->
+            <ColumnDefinition Width="*" MinWidth="340"/>
+            
+            <!-- Modern Draggable Splitter Divider -->
+            <ColumnDefinition Width="14"/>
+            
+            <!-- Disciplined Right: Form maintains an optimal readable width without stretching infinitely -->
+            <ColumnDefinition Width="380" MinWidth="310" MaxWidth="480"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Left Panel: Apps List, Instant Search, Smooth Drag Auto-Scrolling -->
+        <!-- Left Panel: Apps List, Search, Dynamic Width -->
         <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="14">
             <Grid>
                 <Grid.RowDefinitions>
@@ -126,6 +130,23 @@
                 </Grid>
             </Grid>
         </Border>
+
+        <!-- Interactive Drag-to-Resize Splitter Bar -->
+        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="Transparent" Cursor="SizeWE">
+            <GridSplitter.Template>
+                <ControlTemplate TargetType="GridSplitter">
+                    <Border Background="Transparent" Padding="4,0">
+                        <Border x:Name="Divider" Background="{DynamicResource BorderColor}" CornerRadius="1" Width="2"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Divider" Property="Background" Value="{DynamicResource AccentColor}"/>
+                            <Setter TargetName="Divider" Property="Width" Value="3"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </GridSplitter.Template>
+        </GridSplitter>
 
         <!-- Right Panel: App Configuration (Standardized 32px inputs & rounded buttons) -->
         <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="16">
