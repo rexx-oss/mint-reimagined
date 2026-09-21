@@ -15,17 +15,17 @@
 
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
-            <!-- Left Panel (App List): Takes majority share (5*) and expands when maximized -->
-            <ColumnDefinition Width="5*" MinWidth="360"/>
+            <!-- 3 Parts Left: App List (~43% of window) -->
+            <ColumnDefinition Width="3*" MinWidth="300"/>
             
             <!-- Clean 16px Spacing -->
             <ColumnDefinition Width="16"/>
             
-            <!-- Right Panel (Configuration): Takes 3*, but capped at MaxWidth=420 so it never balloons out -->
-            <ColumnDefinition Width="3*" MinWidth="320" MaxWidth="420"/>
+            <!-- 4 Parts Right: Configuration Workspace (~57% of window) -->
+            <ColumnDefinition Width="4*" MinWidth="350"/>
         </Grid.ColumnDefinitions>
 
-        <!-- Left Panel: Apps List Sidebar -->
+        <!-- Left Panel: Apps List Sidebar (3 parts) -->
         <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="14">
             <Grid>
                 <Grid.RowDefinitions>
@@ -134,7 +134,7 @@
             </Grid>
         </Border>
 
-        <!-- Right Panel: App Configuration (Capped so it stays compact) -->
+        <!-- Right Panel: App Configuration (4 parts, no MaxWidth cap) -->
         <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="16">
             <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel>
