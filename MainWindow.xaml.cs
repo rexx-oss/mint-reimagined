@@ -87,7 +87,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         LstApps.ItemsSource = _displayList;
 
-        // Adaptive display scaling: adjusts dimensions proportionally to any monitor (768p, 1080p, 1440p, 4K)
+        // Adaptive display scaling without broken MaxWidth/MaxHeight
         AdaptToScreenResolution();
 
         // Load Mint icon for both window and system tray
@@ -118,18 +118,17 @@ public partial class MainWindow : Window
     {
         var workArea = SystemParameters.WorkArea;
 
-        // Proportional window size: ~55% of display width, ~65% of display height
-        double targetWidth = Math.Clamp(workArea.Width * 0.55, 820, 1280);
-        double targetHeight = Math.Clamp(workArea.Height * 0.65, 540, 850);
+        // Proportional startup size
+        this.Width = Math.Clamp(workArea.Width * 0.65, 880, 1200);
+        this.Height = Math.Clamp(workArea.Height * 0.70, 560, 800);
 
-        this.Width = targetWidth;
-        this.Height = targetHeight;
+        // Safe minimums
+        this.MinWidth = 720;
+        this.MinHeight = 500;
 
-        // Safe boundaries so window never collapses or overflows on any monitor
-        this.MinWidth = Math.Min(720, workArea.Width * 0.9);
-        this.MinHeight = Math.Min(490, workArea.Height * 0.9);
-        this.MaxWidth = workArea.Width;
-        this.MaxHeight = workArea.Height;
+        // NEVER set MaxWidth or MaxHeight to workArea: it breaks maximization at 150% scaling!
+        this.ClearValue(MaxWidthProperty);
+        this.ClearValue(MaxHeightProperty);
     }
 
     public static void TrimMemory()
