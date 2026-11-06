@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Text;
 using System.Windows.Forms;
 
 namespace Mint;
@@ -38,7 +39,7 @@ public class ModernTrayRenderer : ToolStripProfessionalRenderer
     protected override void OnRenderImageMargin(ToolStripRenderEventArgs e)
     {
         bool isDark = ThemeManager.IsDarkThemeActive;
-        Color bg = isDark ? Color.FromArgb(24, 24, 29) : Color.FromArgb(242, 243, 246);
+        Color bg = isDark ? Color.FromArgb(24, 24, 29) : Color.FromArgb(244, 245, 247);
         using var brush = new SolidBrush(bg);
         e.Graphics.FillRectangle(brush, e.AffectedBounds);
     }
@@ -47,9 +48,9 @@ public class ModernTrayRenderer : ToolStripProfessionalRenderer
     {
         if (e.Image != null)
         {
-            // Lock image to the exact vertical center of the item
             int centerY = (e.Item.Height - e.ImageRectangle.Height) / 2;
-            var rect = new Rectangle(e.ImageRectangle.X, centerY, e.ImageRectangle.Width, e.ImageRectangle.Height);
+            var rect = new Rectangle(e.ImageRectangle.X + 2, centerY, e.ImageRectangle.Width, e.ImageRectangle.Height);
+            e.Graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
             e.Graphics.DrawImage(e.Image, rect);
             return;
         }
@@ -58,7 +59,8 @@ public class ModernTrayRenderer : ToolStripProfessionalRenderer
 
     protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
     {
-        // Force the text to share the exact same vertical center line as the icon
+        e.Graphics.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
+
         var rect = e.TextRectangle;
         rect.Y = 0;
         rect.Height = e.Item.Height;
@@ -113,7 +115,7 @@ public class ModernTrayRenderer : ToolStripProfessionalRenderer
     private class ModernColorTable : ProfessionalColorTable
     {
         public override Color ToolStripDropDownBackground =>
-            ThemeManager.IsDarkThemeActive ? Color.FromArgb(24, 24, 29) : Color.FromArgb(242, 243, 246);
+            ThemeManager.IsDarkThemeActive ? Color.FromArgb(24, 24, 29) : Color.FromArgb(244, 245, 247);
 
         public override Color ImageMarginGradientBegin => ToolStripDropDownBackground;
         public override Color ImageMarginGradientMiddle => ToolStripDropDownBackground;
