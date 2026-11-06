@@ -34,7 +34,6 @@ public partial class TrayLauncherWindow : Window
         BuildColumns(settings);
         UpdateLayout();
 
-        // Calculate position above the taskbar near the clock
         GetCursorPos(out var pt);
         var screen = WinForms.Screen.FromPoint(new System.Drawing.Point(pt.X, pt.Y));
         var wa = screen.WorkingArea;
@@ -56,13 +55,12 @@ public partial class TrayLauncherWindow : Window
     private void BuildColumns(AppSettings settings)
     {
         PanelColumns.Children.Clear();
-        int totalCols = Math.Clamp(settings.TrayColumns, 2, 4);
+        // Support as many columns as configured (minimum 1)
+        int totalCols = Math.Max(1, settings.TrayColumns);
 
-        // Buckets for each column
         var colBuckets = new List<List<AppItem>>();
         for (int i = 0; i < totalCols; i++) colBuckets.Add(new List<AppItem>());
 
-        // 1. Place explicitly assigned apps
         var unassigned = new List<AppItem>();
         foreach (var app in settings.Apps)
         {
@@ -72,7 +70,6 @@ public partial class TrayLauncherWindow : Window
                 unassigned.Add(app);
         }
 
-        // 2. Distribute unassigned apps evenly across columns
         int currentBucket = 0;
         foreach (var app in unassigned)
         {
@@ -80,36 +77,26 @@ public partial class TrayLauncherWindow : Window
             currentBucket = (currentBucket + 1) % totalCols;
         }
 
-        // 3. Render columns side-by-side
         for (int colIdx = 0; colIdx < totalCols; colIdx++)
         {
-            if (colIdx > 0)
+            if (colBuckets[colIdx].Count == 0) continue;
+
+            if (PanelColumns.Children.Count > 0)
             {
-                // Subtle vertical divider between columns
                 var divider = new Border
                 {
                     Width = 1,
                     Background = (System.Windows.Media.Brush)Application.Current.Resources["BorderColor"],
-                    Margin = new Thickness(8, 2, 8, 2)
+                    Margin = new Thickness(6, 2, 6, 2)
                 };
                 PanelColumns.Children.Add(divider);
             }
 
             var colStack = new StackPanel
             {
-                Width = 200,
+                Width = 190,
                 Margin = new Thickness(2, 0, 2, 0)
             };
-
-            var header = new TextBlock
-            {
-                Text = $"Column {colIdx + 1}",
-                FontSize = 10,
-                FontWeight = FontWeights.SemiBold,
-                Foreground = (System.Windows.Media.Brush)Application.Current.Resources["TextSecondary"],
-                Margin = new Thickness(6, 2, 6, 6)
-            };
-            colStack.Children.Add(header);
 
             foreach (var app in colBuckets[colIdx])
             {
@@ -142,7 +129,6 @@ public partial class TrayLauncherWindow : Window
             Height = 18,
             VerticalAlignment = VerticalAlignment.Center
         };
-        // Async icon loading
         IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle).ContinueWith(t =>
         {
             if (t.Result != null) Dispatcher.Invoke(() => img.Source = t.Result);
@@ -199,10 +185,7 @@ public partial class TrayLauncherWindow : Window
         }
     }
 
-    private void Window_Deactivated(object sender, EventArgs e)
-    {
-        Hide();
-    }
+    private void Window_Deactivated(object sender, EventArgs e) => Hide();
 
     private void BtnSettings_Click(object sender, RoutedEventArgs e)
     {
