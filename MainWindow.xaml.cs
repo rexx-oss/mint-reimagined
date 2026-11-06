@@ -13,6 +13,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
@@ -23,7 +24,7 @@ namespace Mint;
 public class AppDisplayItem
 {
     public AppItem App { get; set; } = new();
-    public System.Windows.Media.ImageSource? Icon { get; set; }
+    public ImageSource? Icon { get; set; }
 
     public string Subtitle
     {
@@ -48,12 +49,12 @@ public class InsertionAdorner : Adorner
         _brush = brush;
         _pen = new System.Windows.Media.Pen(brush, 2)
         {
-            DashStyle = System.Windows.Media.DashStyles.Dash
+            DashStyle = DashStyles.Dash
         };
         IsHitTestVisible = false;
     }
 
-    protected override void OnRender(System.Windows.Media.DrawingContext dc)
+    protected override void OnRender(DrawingContext dc)
     {
         double y = IsAfter ? AdornedElement.RenderSize.Height : 0;
         double width = AdornedElement.RenderSize.Width;
@@ -83,6 +84,7 @@ public partial class MainWindow : Window
     // Drag & Drop State
     private Point _dragStartPoint;
     private AppDisplayItem? _draggedItem;
+    private AppItem? _draggedBoardApp;
     private InsertionAdorner? _currentAdorner;
     private ListBoxItem? _currentAdornedItem;
 
@@ -124,6 +126,9 @@ public partial class MainWindow : Window
         BuildGroupChips();
         RefreshList();
         BuildTrayContextMenu();
+
+        // Switch to the saved tab
+        SwitchToTab(_settings.ActiveViewTab);
 
         TrimMemory();
     }
@@ -394,19 +399,275 @@ public partial class MainWindow : Window
         RbTrayModern.IsChecked = !_settings.UseClassicTrayMenu;
         RbTrayClassic.IsChecked = _settings.UseClassicTrayMenu;
 
-        TxtTrayCols.Text = Math.Max(1, _settings.TrayColumns).ToString();
-        TxtAppCol.Text = "0";
+        TxtColCountDisplay.Text = Math.Max(1, _settings.TrayColumns).ToString();
     }
 
-    private void TxtTrayCols_TextChanged(object sender, TextChangedEventArgs e)
+    // --- TAB SWITCHING (Classic vs Column Board) ---
+    private void BtnTabClassic_Click(object sender, RoutedEventArgs e) => SwitchToTab(0);
+    private void BtnTabColumns_Click(object sender, RoutedEventArgs e) => SwitchToTab(1);
+
+    private void SwitchToTab(int tabIndex)
     {
-        if (int.TryParse(TxtTrayCols.Text.Trim(), out int val) && val >= 1)
+        _settings.ActiveViewTab = tabIndex;
+        SaveConfig();
+
+        if (tabIndex == 0)
         {
-            _settings.TrayColumns = val;
-            SaveConfig();
+            ViewClassic.Visibility = Visibility.Visible;
+            ViewColumns.Visibility = Visibility.Collapsed;
+            BtnTabClassic.Background = (Brush)Application.Current.Resources["AccentColor"];
+            BtnTabClassic.Foreground = Brushes.White;
+            BtnTabColumns.Background = Brushes.Transparent;
+            BtnTabColumns.Foreground = (Brush)Application.Current.Resources["TextSecondary"];
+            RefreshList(TxtSearch.Text);
+        }
+        else
+        {
+            ViewClassic.Visibility = Visibility.Collapsed;
+            ViewColumns.Visibility = Visibility.Visible;
+            BtnTabColumns.Background = (Brush)Application.Current.Resources["AccentColor"];
+            BtnTabColumns.Foreground = Brushes.White;
+            BtnTabClassic.Background = Brushes.Transparent;
+            BtnTabClassic.Foreground = (Brush)Application.Current.Resources["TextSecondary"];
+            BuildMultiColumnBoard();
         }
     }
 
+    // --- VISUAL MULTI-COLUMN BOARD LOGIC ---
+    private void BuildMultiColumnBoard()
+    {
+        PanelIconDock.Children.Clear();
+        PanelBoardColumns.Children.Clear();
+
+        int totalCols = Math.Max(1, _settings.TrayColumns);
+        TxtColCountDisplay.Text = totalCols.ToString();
+
+        // 1. Populate Available Apps Icon Dock (Compact Icons)
+        foreach (var app in _settings.Apps)
+        {
+            var iconBox = new Border
+            {
+                Width = 36,
+                Height = 36,
+                CornerRadius = new CornerRadius(6),
+                Background = (Brush)Application.Current.Resources["InputBg"],
+                BorderBrush = (Brush)Application.Current.Resources["BorderColor"],
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(3),
+                Cursor = Cursors.Hand,
+                ToolTip = $"{app.AppTitle}\nColumn: {(app.Column > 0 ? app.Column.ToString() : "Auto")}\n{app.AppLink}"
+            };
+
+            var img = new System.Windows.Controls.Image { Width = 22, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle).ContinueWith(t =>
+            {
+                if (t.Result != null) Dispatcher.Invoke(() => img.Source = t.Result);
+            });
+            iconBox.Child = img;
+
+            // Start Drag from Icon Dock
+            iconBox.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
+            iconBox.MouseMove += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed)
+                {
+                    var diff = _dragStartPoint - e.GetPosition(null);
+                    if (Math.Abs(diff.X) > 4 || Math.Abs(diff.Y) > 4)
+                    {
+                        _draggedBoardApp = app;
+                        DragDrop.DoDragDrop(iconBox, app, DragDropEffects.Move);
+                        _draggedBoardApp = null;
+                    }
+                }
+            };
+
+            PanelIconDock.Children.Add(iconBox);
+        }
+
+        // 2. Build Column Drop Target Boxes
+        var colBuckets = new List<List<AppItem>>();
+        for (int i = 0; i < totalCols; i++) colBuckets.Add(new List<AppItem>());
+
+        foreach (var app in _settings.Apps)
+        {
+            if (app.Column >= 1 && app.Column <= totalCols)
+                colBuckets[app.Column - 1].Add(app);
+        }
+
+        for (int i = 0; i < totalCols; i++)
+        {
+            int colNum = i + 1;
+
+            var colBorder = new Border
+            {
+                Width = 200,
+                Margin = new Thickness(0, 0, 10, 0),
+                CornerRadius = new CornerRadius(8),
+                Background = (Brush)Application.Current.Resources["InputBg"],
+                BorderBrush = (Brush)Application.Current.Resources["BorderColor"],
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(8),
+                AllowDrop = true,
+                Tag = colNum
+            };
+
+            var colGrid = new Grid();
+            colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            colGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+
+            // Column Header
+            var colHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
+            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var titleTxt = new TextBlock { Text = $"Column {colNum}", FontWeight = FontWeights.Bold, FontSize = 12, Foreground = (Brush)Application.Current.Resources["TextPrimary"] };
+            var badgeTxt = new TextBlock { Text = $"{colBuckets[i].Count} apps", FontSize = 10, Foreground = (Brush)Application.Current.Resources["TextSecondary"], VerticalAlignment = VerticalAlignment.Center };
+            Grid.SetColumn(titleTxt, 0);
+            Grid.SetColumn(badgeTxt, 1);
+            colHeader.Children.Add(titleTxt);
+            colHeader.Children.Add(badgeTxt);
+            Grid.SetRow(colHeader, 0);
+
+            // Column App List
+            var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+            var listStack = new StackPanel { MinHeight = 150 };
+
+            foreach (var app in colBuckets[i])
+            {
+                var card = new Border
+                {
+                    Background = (Brush)Application.Current.Resources["CardBg"],
+                    CornerRadius = new CornerRadius(6),
+                    Padding = new Thickness(6, 4, 6, 4),
+                    Margin = new Thickness(0, 2, 0, 2),
+                    Cursor = Cursors.Hand,
+                    BorderThickness = new Thickness(0)
+                };
+
+                var cardGrid = new Grid();
+                cardGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(20) });
+                cardGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                cardGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                var cImg = new System.Windows.Controls.Image { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+                IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle).ContinueWith(t =>
+                {
+                    if (t.Result != null) Dispatcher.Invoke(() => cImg.Source = t.Result);
+                });
+                Grid.SetColumn(cImg, 0);
+
+                var cTxt = new TextBlock { Text = app.AppTitle, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = (Brush)Application.Current.Resources["TextPrimary"], VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
+                Grid.SetColumn(cTxt, 1);
+
+                // Quick remove button
+                var btnRemove = new Button { Content = "✕", Background = Brushes.Transparent, Foreground = (Brush)Application.Current.Resources["TextSecondary"], BorderThickness = new Thickness(0), Padding = new Thickness(4, 0, 4, 0), FontSize = 10, Cursor = Cursors.Hand };
+                btnRemove.Click += (s, e) =>
+                {
+                    app.Column = 0;
+                    SaveConfig();
+                    BuildMultiColumnBoard();
+                    BuildTrayContextMenu();
+                };
+                Grid.SetColumn(btnRemove, 2);
+
+                cardGrid.Children.Add(cImg);
+                cardGrid.Children.Add(cTxt);
+                cardGrid.Children.Add(btnRemove);
+                card.Child = cardGrid;
+
+                // Dragging app between columns
+                card.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
+                card.MouseMove += (s, e) =>
+                {
+                    if (e.LeftButton == MouseButtonState.Pressed)
+                    {
+                        var diff = _dragStartPoint - e.GetPosition(null);
+                        if (Math.Abs(diff.X) > 4 || Math.Abs(diff.Y) > 4)
+                        {
+                            _draggedBoardApp = app;
+                            DragDrop.DoDragDrop(card, app, DragDropEffects.Move);
+                            _draggedBoardApp = null;
+                        }
+                    }
+                };
+
+                listStack.Children.Add(card);
+            }
+
+            scroll.Content = listStack;
+            Grid.SetRow(scroll, 1);
+            colGrid.Children.Add(colHeader);
+            colGrid.Children.Add(scroll);
+            colBorder.Child = colGrid;
+
+            // Handle Drop into this Column
+            colBorder.DragOver += (s, e) =>
+            {
+                e.Effects = DragDropEffects.Move;
+                e.Handled = true;
+            };
+            colBorder.Drop += (s, e) =>
+            {
+                var targetApp = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
+                if (targetApp != null)
+                {
+                    targetApp.Column = colNum;
+                    SaveConfig();
+                    BuildMultiColumnBoard();
+                    BuildTrayContextMenu();
+                }
+            };
+
+            PanelBoardColumns.Children.Add(colBorder);
+        }
+    }
+
+    private void DockPool_DragOver(object sender, DragEventArgs e) => e.Effects = DragDropEffects.Move;
+
+    private void DockPool_Drop(object sender, DragEventArgs e)
+    {
+        var targetApp = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
+        if (targetApp != null)
+        {
+            targetApp.Column = 0; // Reset to Auto
+            SaveConfig();
+            BuildMultiColumnBoard();
+            BuildTrayContextMenu();
+        }
+    }
+
+    private void BtnIncCols_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.TrayColumns++;
+        SaveConfig();
+        BuildMultiColumnBoard();
+        BuildTrayContextMenu();
+    }
+
+    private void BtnDecCols_Click(object sender, RoutedEventArgs e)
+    {
+        if (_settings.TrayColumns > 1)
+        {
+            _settings.TrayColumns--;
+            SaveConfig();
+            BuildMultiColumnBoard();
+            BuildTrayContextMenu();
+        }
+    }
+
+    private void BtnAutoBalance_Click(object sender, RoutedEventArgs e)
+    {
+        int totalCols = Math.Max(1, _settings.TrayColumns);
+        for (int i = 0; i < _settings.Apps.Count; i++)
+        {
+            _settings.Apps[i].Column = (i % totalCols) + 1;
+        }
+        SaveConfig();
+        BuildMultiColumnBoard();
+        BuildTrayContextMenu();
+    }
+
+    // --- PREFERENCES LOGIC ---
     private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
     {
         _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
@@ -424,6 +685,7 @@ public partial class MainWindow : Window
         SaveConfig();
         BuildGroupChips();
         BuildTrayContextMenu();
+        if (_settings.ActiveViewTab == 1) BuildMultiColumnBoard();
     }
 
     private void BuildGroupChips()
@@ -449,11 +711,11 @@ public partial class MainWindow : Window
                 FontWeight = FontWeights.SemiBold,
                 Cursor = Cursors.Hand,
                 Background = (group == _activeGroupFilter) 
-                    ? (System.Windows.Media.Brush)Application.Current.Resources["AccentColor"] 
-                    : (System.Windows.Media.Brush)Application.Current.Resources["InputBg"],
+                    ? (Brush)Application.Current.Resources["AccentColor"] 
+                    : (Brush)Application.Current.Resources["InputBg"],
                 Foreground = (group == _activeGroupFilter) 
-                    ? System.Windows.Media.Brushes.White 
-                    : (System.Windows.Media.Brush)Application.Current.Resources["TextSecondary"],
+                    ? Brushes.White 
+                    : (Brush)Application.Current.Resources["TextSecondary"],
                 BorderThickness = new Thickness(0)
             };
 
@@ -562,7 +824,7 @@ public partial class MainWindow : Window
         while (child != null)
         {
             if (child is T parent) return parent;
-            child = System.Windows.Media.VisualTreeHelper.GetParent(child);
+            child = VisualTreeHelper.GetParent(child);
         }
         return null;
     }
@@ -570,9 +832,9 @@ public partial class MainWindow : Window
     private static T? FindVisualChild<T>(DependencyObject? parent) where T : DependencyObject
     {
         if (parent == null) return null;
-        for (int i = 0; i < System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent); i++)
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
         {
-            var child = System.Windows.Media.VisualTreeHelper.GetChild(parent, i);
+            var child = VisualTreeHelper.GetChild(parent, i);
             if (child is T result) return result;
             var nested = FindVisualChild<T>(child);
             if (nested != null) return nested;
@@ -580,7 +842,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // --- Dynamic Drag Auto-Scroll (Proportional to Drag Distance) ---
+    // --- Dynamic Drag Auto-Scroll (Classic Tab) ---
     private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var hit = e.OriginalSource as DependencyObject;
@@ -640,7 +902,6 @@ public partial class MainWindow : Window
         Point windowPos = e.GetPosition(this);
         const double edgeThreshold = 35.0;
 
-        // Dynamic speed calculation based on drag distance
         double dragDistance = Math.Abs(windowPos.Y - _dragStartPoint.Y);
         double distanceSpeedBoost = Math.Clamp(dragDistance / 60.0, 1.0, 8.0);
 
@@ -744,7 +1005,7 @@ public partial class MainWindow : Window
         var layer = AdornerLayer.GetAdornerLayer(item);
         if (layer != null)
         {
-            var brush = (System.Windows.Media.Brush)Application.Current.Resources["AccentColor"];
+            var brush = (Brush)Application.Current.Resources["AccentColor"];
             _currentAdorner = new InsertionAdorner(item, isAfter, brush);
             _currentAdornedItem = item;
             layer.Add(_currentAdorner);
@@ -799,7 +1060,6 @@ public partial class MainWindow : Window
             TxtArgs.Text = item.App.AppParams;
             TxtGroup.Text = item.App.AppGroup;
             TxtCustomIcon.Text = item.App.CustomIconPath;
-            TxtAppCol.Text = item.App.Column.ToString();
             UpdateEditIconPreview();
         }
     }
@@ -814,6 +1074,7 @@ public partial class MainWindow : Window
             BuildGroupChips();
             RefreshList(TxtSearch.Text);
             BuildTrayContextMenu();
+            if (_settings.ActiveViewTab == 1) BuildMultiColumnBoard();
         }
     }
 
@@ -866,8 +1127,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        int.TryParse(TxtAppCol.Text.Trim(), out int assignedCol);
-
         if (_editingApp != null)
         {
             IconHelper.InvalidateCache(_editingApp.AppTitle);
@@ -878,7 +1137,6 @@ public partial class MainWindow : Window
             _editingApp.AppParams = TxtArgs.Text.Trim();
             _editingApp.AppGroup = TxtGroup.Text.Trim();
             _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
-            _editingApp.Column = Math.Max(0, assignedCol);
             _editingApp = null;
         }
         else
@@ -891,8 +1149,7 @@ public partial class MainWindow : Window
                 AppLink = TxtPath.Text.Trim(),
                 AppParams = TxtArgs.Text.Trim(),
                 AppGroup = TxtGroup.Text.Trim(),
-                CustomIconPath = TxtCustomIcon.Text.Trim(),
-                Column = Math.Max(0, assignedCol)
+                CustomIconPath = TxtCustomIcon.Text.Trim()
             });
         }
 
@@ -911,7 +1168,6 @@ public partial class MainWindow : Window
         TxtArgs.Clear();
         TxtGroup.Clear();
         TxtCustomIcon.Clear();
-        TxtAppCol.Text = "0";
         ImgIconPreview.Source = null;
     }
 
