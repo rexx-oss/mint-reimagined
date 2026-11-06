@@ -14,229 +14,283 @@
         Closing="Window_Closing">
 
     <Grid Margin="16">
-        <Grid.ColumnDefinitions>
-            <!-- 3 Parts Left: App List (~43% of window) -->
-            <ColumnDefinition Width="3*" MinWidth="300"/>
-            
-            <!-- Clean 16px Spacing -->
-            <ColumnDefinition Width="16"/>
-            
-            <!-- 4 Parts Right: Configuration Workspace (~57% of window) -->
-            <ColumnDefinition Width="4*" MinWidth="350"/>
-        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <!-- Top Navigation Tab Bar -->
+            <RowDefinition Height="Auto"/>
+            <!-- Content Views (Classic vs Column Board) -->
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
-        <!-- Left Panel: Apps List Sidebar -->
-        <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="14">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+        <!-- Top Segmented Bar: Switch between Classic and Column Board -->
+        <Border Grid.Row="0" Background="{DynamicResource CardBg}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="4" Margin="0,0,0,12" HorizontalAlignment="Left">
+            <StackPanel Orientation="Horizontal">
+                <Button x:Name="BtnTabClassic" Content="📋  Classic List &amp; Editor" 
+                        Background="{DynamicResource AccentColor}" Foreground="White" 
+                        Padding="14,4" Height="28" BorderThickness="0" Margin="0,0,4,0" Cursor="Hand"
+                        Click="BtnTabClassic_Click"/>
+                <Button x:Name="BtnTabColumns" Content="⊞  Multi-Column Organizer" 
+                        Background="Transparent" Foreground="{DynamicResource TextSecondary}" 
+                        Padding="14,4" Height="28" BorderThickness="0" Cursor="Hand"
+                        Click="BtnTabColumns_Click"/>
+            </StackPanel>
+        </Border>
 
-                <!-- Full-Width Search Bar -->
-                <Border Grid.Row="0" Background="{DynamicResource InputBg}" CornerRadius="6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="0,0,0,10" Height="34">
-                    <Grid Margin="10,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Text="🔍" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                        <TextBox x:Name="TxtSearch" Grid.Column="1" 
-                                 Background="Transparent" 
-                                 BorderThickness="0" 
-                                 Foreground="{DynamicResource TextPrimary}" 
-                                 FontSize="13" 
-                                 Height="32"
-                                 Padding="0"
-                                 VerticalAlignment="Center"
-                                 TextChanged="TxtSearch_TextChanged"
-                                 KeyDown="TxtSearch_KeyDown"/>
+        <!-- PAGE 1: Classic View (The exact 3:4 layout) -->
+        <Grid x:Name="ViewClassic" Grid.Row="1" Visibility="Visible">
+            <Grid.ColumnDefinitions>
+                <!-- 3 Parts Left: App List (~43%) -->
+                <ColumnDefinition Width="3*" MinWidth="300"/>
+                <!-- 16px Spacing -->
+                <ColumnDefinition Width="16"/>
+                <!-- 4 Parts Right: Configuration Workspace (~57%) -->
+                <ColumnDefinition Width="4*" MinWidth="350"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left Panel: Apps List Sidebar -->
+            <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="14">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- Full-Width Search Bar -->
+                    <Border Grid.Row="0" Background="{DynamicResource InputBg}" CornerRadius="6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="0,0,0,10" Height="34">
+                        <Grid Margin="10,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="🔍" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                            <TextBox x:Name="TxtSearch" Grid.Column="1" 
+                                     Background="Transparent" 
+                                     BorderThickness="0" 
+                                     Foreground="{DynamicResource TextPrimary}" 
+                                     FontSize="13" 
+                                     Height="32"
+                                     Padding="0"
+                                     VerticalAlignment="Center"
+                                     TextChanged="TxtSearch_TextChanged"
+                                     KeyDown="TxtSearch_KeyDown"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Group Filter Buttons -->
+                    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
+                        <StackPanel x:Name="PanelGroups" Orientation="Horizontal"/>
+                    </ScrollViewer>
+
+                    <!-- Apps List -->
+                    <ListBox Grid.Row="2" x:Name="LstApps"
+                             Background="Transparent"
+                             BorderThickness="0"
+                             AllowDrop="True"
+                             VirtualizingPanel.IsVirtualizing="True"
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             PreviewMouseLeftButtonDown="LstApps_PreviewMouseLeftButtonDown"
+                             MouseMove="LstApps_MouseMove"
+                             DragOver="LstApps_DragOver"
+                             DragLeave="LstApps_DragLeave"
+                             Drop="LstApps_Drop"
+                             PreviewKeyDown="LstApps_PreviewKeyDown"
+                             MouseDoubleClick="LstApps_MouseDoubleClick">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,2"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <ContentPresenter/>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border x:Name="Card" Background="{DynamicResource InputBg}" CornerRadius="6" Padding="10,8" Margin="0,2" Cursor="Hand">
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="🚀  Launch" Click="MenuLaunch_Click"/>
+                                            <MenuItem Header="🛡️  Run as Administrator" Click="MenuRunAsAdmin_Click"/>
+                                            <MenuItem Header="📂  Open File Location" Click="MenuOpenLocation_Click"/>
+                                            <Separator Background="{DynamicResource BorderColor}"/>
+                                            <MenuItem Header="🔤  Sort A → Z" Click="BtnSortAZ_Click"/>
+                                            <Separator Background="{DynamicResource BorderColor}"/>
+                                            <MenuItem Header="✏️  Edit Details &amp; Icon" Click="MenuEdit_Click"/>
+                                            <MenuItem Header="🗑️  Delete" Click="MenuDelete_Click"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="28"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Image Grid.Column="0" Source="{Binding Icon}" Width="22" Height="22" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="1" Margin="10,0,10,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding App.AppTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource TextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="↵" Foreground="{DynamicResource TextSecondary}" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    </Grid>
+                                </Border>
+                                <DataTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBg}"/>
+                                    </Trigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Footer -->
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <TextBlock x:Name="TxtFooterCount" Text="0 Apps" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Hold near top/bottom to auto-scroll" FontSize="11" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <!-- Right Panel: App Configuration -->
+            <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="16">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="App Configuration" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
+
+                        <!-- App Title -->
+                        <TextBlock Text="App Title" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,4"/>
+                        <TextBox x:Name="TxtTitle"/>
+
+                        <!-- Target / Location -->
+                        <TextBlock Text="Target / Location" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="TxtPath" Grid.Column="0" TextChanged="TxtPath_TextChanged"/>
+                            <Button Grid.Column="2" Content="Browse..." Click="BtnBrowseTarget_Click"/>
+                        </Grid>
+
+                        <!-- Arguments -->
+                        <TextBlock Text="Arguments (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
+                        <TextBox x:Name="TxtArgs"/>
+
+                        <!-- Category / Group -->
+                        <TextBlock Text="Category / Group (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
+                        <TextBox x:Name="TxtGroup"/>
+
+                        <!-- Standardized App Icon Section -->
+                        <TextBlock Text="App Icon (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="32"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="8"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <Border Grid.Column="0" Width="32" Height="32" Background="{DynamicResource InputBg}" CornerRadius="6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1">
+                                <Image x:Name="ImgIconPreview" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+
+                            <TextBox x:Name="TxtCustomIcon" Grid.Column="2" TextChanged="TxtCustomIcon_TextChanged"/>
+                            <Button Grid.Column="4" Content="Browse..." Click="BtnBrowseIcon_Click"/>
+                        </Grid>
+
+                        <!-- Action Buttons -->
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                            <Button Content="Clear" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextSecondary}" Padding="16,0" Margin="0,0,8,0" Click="BtnClear_Click"/>
+                            <Button x:Name="BtnSave" Content="Save App" Background="{DynamicResource AccentColor}" Foreground="White" Padding="18,0" Click="BtnSave_Click"/>
+                        </StackPanel>
+
+                        <Separator Background="{DynamicResource BorderColor}" Margin="0,16"/>
+
+                        <!-- Tray Menu Preferences -->
+                        <TextBlock Text="Tray Launcher Menu" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <RadioButton x:Name="RbTrayModern" Content="Modern Multi-Column" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTrayStyle_Checked"/>
+                            <RadioButton x:Name="RbTrayClassic" Content="Classic Vertical" Foreground="{DynamicResource TextSecondary}" Checked="RbTrayStyle_Checked"/>
+                        </StackPanel>
+
+                        <!-- Theme Preferences -->
+                        <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                            <RadioButton x:Name="RbSystem" Content="System" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
+                            <RadioButton x:Name="RbDark" Content="Dark" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
+                            <RadioButton x:Name="RbLight" Content="Light" Foreground="{DynamicResource TextSecondary}" Checked="RbTheme_Checked"/>
+                        </StackPanel>
+
+                        <CheckBox x:Name="ChkAutoStart" Content="Start with Windows (Minimized to Tray)" Foreground="{DynamicResource TextSecondary}" Click="ChkAutoStart_Click"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- PAGE 2: Multi-Column Visual Board (Drag and drop apps between columns) -->
+        <Grid x:Name="ViewColumns" Grid.Row="1" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <!-- Board Controls (Number of columns, auto-balance) -->
+                <RowDefinition Height="Auto"/>
+                <!-- Board Workspace -->
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Board Header Bar -->
+            <Border Grid.Row="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="12,8" Margin="0,0,0,10">
+                <Grid>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="Tray Columns:" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextPrimary}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <Button Content="−" Width="28" Height="28" Padding="0" FontSize="14" Cursor="Hand" Click="BtnDecCols_Click"/>
+                        <TextBlock x:Name="TxtColCountDisplay" Text="3" FontWeight="Bold" FontSize="13" Width="36" TextAlignment="Center" VerticalAlignment="Center"/>
+                        <Button Content="+" Width="28" Height="28" Padding="0" FontSize="14" Cursor="Hand" Click="BtnIncCols_Click"/>
+                        <Button Content="⚡ Auto-Balance Columns" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextSecondary}" Height="28" Padding="12,0" Margin="16,0,0,0" FontSize="11" Cursor="Hand" Click="BtnAutoBalance_Click"/>
+                    </StackPanel>
+                    <TextBlock Text="Drag apps between columns or from the icon dock to organize" FontSize="11" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Board Workspace -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <!-- Left: Available Apps Icon Dock (Width 180) -->
+                    <ColumnDefinition Width="190"/>
+                    <ColumnDefinition Width="12"/>
+                    <!-- Right: Dynamic Column Drop Targets -->
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left Icon Dock -->
+                <Border Grid.Column="0" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10"
+                        AllowDrop="True" Drop="DockPool_Drop" DragOver="DockPool_DragOver">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="📦 App Icon Dock" FontWeight="SemiBold" FontSize="12" Foreground="{DynamicResource TextPrimary}" Margin="4,0,0,8"/>
+                        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                            <!-- Wrapped Icon Tiles -->
+                            <WrapPanel x:Name="PanelIconDock"/>
+                        </ScrollViewer>
                     </Grid>
                 </Border>
 
-                <!-- Group Filter Buttons -->
-                <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
-                    <StackPanel x:Name="PanelGroups" Orientation="Horizontal"/>
-                </ScrollViewer>
-
-                <!-- Apps List -->
-                <ListBox Grid.Row="2" x:Name="LstApps"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         AllowDrop="True"
-                         VirtualizingPanel.IsVirtualizing="True"
-                         VirtualizingPanel.ScrollUnit="Pixel"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                         PreviewMouseLeftButtonDown="LstApps_PreviewMouseLeftButtonDown"
-                         MouseMove="LstApps_MouseMove"
-                         DragOver="LstApps_DragOver"
-                         DragLeave="LstApps_DragLeave"
-                         Drop="LstApps_Drop"
-                         PreviewKeyDown="LstApps_PreviewKeyDown"
-                         MouseDoubleClick="LstApps_MouseDoubleClick">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Setter Property="Padding" Value="0"/>
-                            <Setter Property="Margin" Value="0,2"/>
-                            <Setter Property="Background" Value="Transparent"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ListBoxItem">
-                                        <ContentPresenter/>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <Border x:Name="Card" Background="{DynamicResource InputBg}" CornerRadius="6" Padding="10,8" Margin="0,2" Cursor="Hand">
-                                <Border.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="🚀  Launch" Click="MenuLaunch_Click"/>
-                                        <MenuItem Header="🛡️  Run as Administrator" Click="MenuRunAsAdmin_Click"/>
-                                        <MenuItem Header="📂  Open File Location" Click="MenuOpenLocation_Click"/>
-                                        <Separator Background="{DynamicResource BorderColor}"/>
-                                        <MenuItem Header="🔤  Sort A → Z" Click="BtnSortAZ_Click"/>
-                                        <Separator Background="{DynamicResource BorderColor}"/>
-                                        <MenuItem Header="✏️  Edit Details &amp; Icon" Click="MenuEdit_Click"/>
-                                        <MenuItem Header="🗑️  Delete" Click="MenuDelete_Click"/>
-                                    </ContextMenu>
-                                </Border.ContextMenu>
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="28"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <Image Grid.Column="0" Source="{Binding Icon}" Width="22" Height="22" VerticalAlignment="Center"/>
-                                    <StackPanel Grid.Column="1" Margin="10,0,10,0" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding App.AppTitle}" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" TextTrimming="CharacterEllipsis"/>
-                                        <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="{DynamicResource TextSecondary}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/>
-                                    </StackPanel>
-                                    <TextBlock Grid.Column="2" Text="↵" Foreground="{DynamicResource TextSecondary}" FontSize="13" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                                </Grid>
-                            </Border>
-                            <DataTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardHoverBg}"/>
-                                </Trigger>
-                            </DataTemplate.Triggers>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-
-                <!-- Footer -->
-                <Grid Grid.Row="3" Margin="0,10,0,0">
-                    <TextBlock x:Name="TxtFooterCount" Text="0 Apps" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
-                    <TextBlock Text="Hold near edge to auto-scroll" FontSize="11" Foreground="{DynamicResource TextSecondary}" HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                </Grid>
+                <!-- Right Columns Canvas (Horizontally Scrollable) -->
+                <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="10">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <StackPanel x:Name="PanelBoardColumns" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </Border>
             </Grid>
-        </Border>
-
-        <!-- Right Panel: App Configuration -->
-        <Border Grid.Column="2" Background="{DynamicResource CardBg}" CornerRadius="10" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Padding="16">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <TextBlock Text="App Configuration" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,12"/>
-
-                    <!-- App Title -->
-                    <TextBlock Text="App Title" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,2,0,4"/>
-                    <TextBox x:Name="TxtTitle"/>
-
-                    <!-- Target / Location -->
-                    <TextBlock Text="Target / Location" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtPath" Grid.Column="0" TextChanged="TxtPath_TextChanged"/>
-                        <Button Grid.Column="2" Content="Browse..." Click="BtnBrowseTarget_Click"/>
-                    </Grid>
-
-                    <!-- Arguments -->
-                    <TextBlock Text="Arguments (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
-                    <TextBox x:Name="TxtArgs"/>
-
-                    <!-- Category & Column Assignment Row -->
-                    <Grid Margin="0,10,0,4">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="140"/>
-                        </Grid.ColumnDefinitions>
-
-                        <StackPanel Grid.Column="0">
-                            <TextBlock Text="Category / Group" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="TxtGroup"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2">
-                            <TextBlock Text="Tray Column (0 = Auto)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,4"/>
-                            <TextBox x:Name="TxtAppCol" Height="32" TextAlignment="Center"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <!-- Standardized App Icon Section -->
-                    <TextBlock Text="App Icon (optional)" FontSize="11" Foreground="{DynamicResource TextSecondary}" Margin="0,10,0,4"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="32"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="8"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Border Grid.Column="0" Width="32" Height="32" Background="{DynamicResource InputBg}" CornerRadius="6" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1">
-                            <Image x:Name="ImgIconPreview" Width="20" Height="20" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-
-                        <TextBox x:Name="TxtCustomIcon" Grid.Column="2" TextChanged="TxtCustomIcon_TextChanged"/>
-                        <Button Grid.Column="4" Content="Browse..." Click="BtnBrowseIcon_Click"/>
-                    </Grid>
-
-                    <!-- Action Buttons -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-                        <Button Content="Clear" Background="{DynamicResource InputBg}" Foreground="{DynamicResource TextSecondary}" Padding="16,0" Margin="0,0,8,0" Click="BtnClear_Click"/>
-                        <Button x:Name="BtnSave" Content="Save App" Background="{DynamicResource AccentColor}" Foreground="White" Padding="18,0" Click="BtnSave_Click"/>
-                    </StackPanel>
-
-                    <Separator Background="{DynamicResource BorderColor}" Margin="0,16"/>
-
-                    <!-- Tray Menu Preferences -->
-                    <TextBlock Text="Tray Launcher Menu" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <RadioButton x:Name="RbTrayModern" Content="Modern Multi-Column" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTrayStyle_Checked"/>
-                        <RadioButton x:Name="RbTrayClassic" Content="Classic Vertical" Foreground="{DynamicResource TextSecondary}" Checked="RbTrayStyle_Checked"/>
-                    </StackPanel>
-
-                    <!-- Dynamic Column Count Preference -->
-                    <Grid Margin="0,0,0,12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="10"/>
-                            <ColumnDefinition Width="65"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Number of Tray Columns:" FontSize="11" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
-                        <TextBox Grid.Column="2" x:Name="TxtTrayCols" Height="28" TextAlignment="Center" TextChanged="TxtTrayCols_TextChanged"/>
-                    </Grid>
-
-                    <!-- Theme Preferences -->
-                    <TextBlock Text="Theme" FontWeight="SemiBold" FontSize="13" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,6"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                        <RadioButton x:Name="RbSystem" Content="System" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
-                        <RadioButton x:Name="RbDark" Content="Dark" Foreground="{DynamicResource TextSecondary}" Margin="0,0,14,0" Checked="RbTheme_Checked"/>
-                        <RadioButton x:Name="RbLight" Content="Light" Foreground="{DynamicResource TextSecondary}" Checked="RbTheme_Checked"/>
-                    </StackPanel>
-
-                    <CheckBox x:Name="ChkAutoStart" Content="Start with Windows (Minimized to Tray)" Foreground="{DynamicResource TextSecondary}" Click="ChkAutoStart_Click"/>
-                </StackPanel>
-            </ScrollViewer>
-        </Border>
+        </Grid>
     </Grid>
 </Window>
