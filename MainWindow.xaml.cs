@@ -25,10 +25,15 @@ public class AppDisplayItem
     public AppItem App { get; set; } = new();
     public System.Windows.Media.ImageSource? Icon { get; set; }
 
-    // Shows path, with group prefix if one exists
-    public string Subtitle => string.IsNullOrWhiteSpace(App.AppGroup) 
-        ? App.AppLink 
-        : $"{App.AppGroup}  •  {App.AppLink}";
+    public string Subtitle
+    {
+        get
+        {
+            string colText = App.Column > 0 ? $"Col {App.Column}" : "Auto";
+            string grpText = !string.IsNullOrWhiteSpace(App.AppGroup) ? $"{App.AppGroup} • " : "";
+            return $"{grpText}[{colText}]  •  {App.AppLink}";
+        }
+    }
 }
 
 public class InsertionAdorner : Adorner
@@ -64,10 +69,14 @@ public partial class MainWindow : Window
     [DllImport("psapi.dll")]
     private static extern int EmptyWorkingSet(IntPtr hwProc);
 
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
     private readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "apps.json");
     private AppSettings _settings = new();
     private readonly ObservableCollection<AppDisplayItem> _displayList = new();
     private readonly WinForms.NotifyIcon _notifyIcon;
+    private TrayLauncherWindow? _trayLauncher;
     private AppItem? _editingApp;
     private string _activeGroupFilter = "All";
 
@@ -77,7 +86,7 @@ public partial class MainWindow : Window
     private InsertionAdorner? _currentAdorner;
     private ListBoxItem? _currentAdornedItem;
 
-    // Auto-scroll when dragging near edges
+    // Controlled Auto-Scroll
     private DispatcherTimer? _autoScrollTimer;
     private double _autoScrollDelta = 0;
     private ScrollViewer? _listScrollViewer;
@@ -87,10 +96,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         LstApps.ItemsSource = _displayList;
 
-        // Adaptive display scaling without broken MaxWidth/MaxHeight
         AdaptToScreenResolution();
 
-        // Load Mint icon for both window and system tray
         var appIcon = LoadMintIcon();
         _notifyIcon = new WinForms.NotifyIcon
         {
@@ -99,34 +106,45 @@ public partial class MainWindow : Window
             Visible = true
         };
 
-        // Window ONLY opens when double-clicking the tray icon
         _notifyIcon.DoubleClick += (s, e) => ShowAndRestore();
+        _notifyIcon.MouseClick += (s, e) =>
+        {
+            if (e.Button == WinForms.MouseButtons.Right && !_settings.UseClassicTrayMenu)
+            {
+                // Open Modern Multi-Column Flyout
+                OpenModernTrayFlyout();
+            }
+        };
+
+        _trayLauncher = new TrayLauncherWindow(this);
 
         InitAutoScroll();
         LoadConfig();
         ThemeManager.ApplyTheme(_settings.Theme);
-        SyncThemeRadios();
+        SyncPreferences();
         BuildGroupChips();
         RefreshList();
         BuildTrayContextMenu();
 
-        // Flush memory immediately so startup RAM in tray is ~15-20 MB
         TrimMemory();
+    }
+
+    private void OpenModernTrayFlyout()
+    {
+        _trayLauncher ??= new TrayLauncherWindow(this);
+        _trayLauncher.Open(_settings);
     }
 
     private void AdaptToScreenResolution()
     {
         var workArea = SystemParameters.WorkArea;
 
-        // Proportional startup size
         this.Width = Math.Clamp(workArea.Width * 0.65, 880, 1200);
         this.Height = Math.Clamp(workArea.Height * 0.70, 560, 800);
 
-        // Safe minimums
         this.MinWidth = 720;
         this.MinHeight = 500;
 
-        // NEVER set MaxWidth or MaxHeight to workArea: it breaks maximization at 150% scaling!
         this.ClearValue(MaxWidthProperty);
         this.ClearValue(MaxHeightProperty);
     }
@@ -173,7 +191,7 @@ public partial class MainWindow : Window
     {
         _autoScrollTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(35)
+            Interval = TimeSpan.FromMilliseconds(25)
         };
         _autoScrollTimer.Tick += (s, e) =>
         {
@@ -189,17 +207,31 @@ public partial class MainWindow : Window
 
     public void BuildTrayContextMenu()
     {
+        if (!_settings.UseClassicTrayMenu)
+        {
+            // Null out context menu so right-click is handled exclusively by MouseClick flyout
+            _notifyIcon.ContextMenuStrip = null;
+            return;
+        }
+
+        // Classic WinForms Menu with Modern Renderer
         var menu = new WinForms.ContextMenuStrip
         {
             Renderer = new ModernTrayRenderer(),
-            ShowImageMargin = true
+            ShowImageMargin = true,
+            DropShadowEnabled = true
+        };
+
+        menu.HandleCreated += (s, e) =>
+        {
+            int roundPreference = 2;
+            DwmSetWindowAttribute(menu.Handle, 33, ref roundPreference, sizeof(int));
         };
 
         bool isDark = ThemeManager.IsDarkThemeActive;
         var font = new System.Drawing.Font("Segoe UI Semibold", 9.5f);
         var foreColor = isDark ? System.Drawing.Color.FromArgb(237, 237, 240) : System.Drawing.Color.FromArgb(30, 34, 41);
 
-        // Grouped apps with submenus
         var groups = _settings.Apps
             .Where(a => !string.IsNullOrWhiteSpace(a.AppGroup))
             .GroupBy(a => a.AppGroup)
@@ -232,7 +264,6 @@ public partial class MainWindow : Window
 
         if (groups.Any()) menu.Items.Add(new WinForms.ToolStripSeparator());
 
-        // Ungrouped apps
         var ungrouped = _settings.Apps.Where(a => string.IsNullOrWhiteSpace(a.AppGroup)).ToList();
         foreach (var app in ungrouped)
         {
@@ -249,30 +280,31 @@ public partial class MainWindow : Window
 
         if (menu.Items.Count > 0) menu.Items.Add(new WinForms.ToolStripSeparator());
 
-        // Exit
         var exitItem = new WinForms.ToolStripMenuItem("Exit", null)
         {
             Font = font,
             ForeColor = foreColor,
             Padding = new WinForms.Padding(6, 4, 6, 4)
         };
-        exitItem.Click += (s, e) =>
-        {
-            _notifyIcon.Visible = false;
-            _notifyIcon.Dispose();
-            Application.Current.Shutdown();
-        };
+        exitItem.Click += (s, e) => ExitApplication();
         menu.Items.Add(exitItem);
 
         _notifyIcon.ContextMenuStrip = menu;
     }
 
-    private void ShowAndRestore()
+    public void ShowAndRestore()
     {
         Show();
         WindowState = WindowState.Normal;
         Activate();
         TxtSearch.Focus();
+    }
+
+    public void ExitApplication()
+    {
+        _notifyIcon.Visible = false;
+        _notifyIcon.Dispose();
+        Application.Current.Shutdown();
     }
 
     private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
@@ -297,9 +329,9 @@ public partial class MainWindow : Window
         {
             _settings.Apps = new List<AppItem>
             {
-                new AppItem { AppTitle = "Notepad", AppLink = "notepad.exe", AppGroup = "Tools" },
-                new AppItem { AppTitle = "Calculator", AppLink = "calc.exe", AppGroup = "Tools" },
-                new AppItem { AppTitle = "Command Prompt", AppLink = "cmd.exe", AppGroup = "System" }
+                new AppItem { AppTitle = "Notepad", AppLink = "notepad.exe", AppGroup = "Tools", Column = 1 },
+                new AppItem { AppTitle = "Calculator", AppLink = "calc.exe", AppGroup = "Tools", Column = 2 },
+                new AppItem { AppTitle = "Command Prompt", AppLink = "cmd.exe", AppGroup = "System", Column = 3 }
             };
             SaveConfig();
         }
@@ -318,11 +350,36 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    private void SyncThemeRadios()
+    private void SyncPreferences()
     {
+        // Themes
         RbSystem.IsChecked = _settings.Theme == AppTheme.System;
         RbDark.IsChecked = _settings.Theme == AppTheme.Dark;
         RbLight.IsChecked = _settings.Theme == AppTheme.Light;
+
+        // Tray Style
+        RbTrayModern.IsChecked = !_settings.UseClassicTrayMenu;
+        RbTrayClassic.IsChecked = _settings.UseClassicTrayMenu;
+
+        // Column Count
+        RbCols2.IsChecked = _settings.TrayColumns == 2;
+        RbCols3.IsChecked = _settings.TrayColumns == 3;
+        RbCols4.IsChecked = _settings.TrayColumns == 4;
+    }
+
+    private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
+    {
+        _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
+        SaveConfig();
+        BuildTrayContextMenu();
+    }
+
+    private void RbCols_Checked(object sender, RoutedEventArgs e)
+    {
+        if (RbCols2.IsChecked == true) _settings.TrayColumns = 2;
+        else if (RbCols3.IsChecked == true) _settings.TrayColumns = 3;
+        else if (RbCols4.IsChecked == true) _settings.TrayColumns = 4;
+        SaveConfig();
     }
 
     private void RbTheme_Checked(object sender, RoutedEventArgs e)
@@ -468,7 +525,6 @@ public partial class MainWindow : Window
             LaunchApp(item.App);
     }
 
-    // --- Visual Tree Helpers ---
     private static T? FindVisualParent<T>(DependencyObject? child) where T : DependencyObject
     {
         while (child != null)
@@ -492,7 +548,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // --- Drag & Drop: Controlled Auto-Scroll & Insertion Adorner ---
+    // --- Drag & Drop: Smooth Pixel-Level Auto-Scroll & Insertion Adorner ---
     private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var hit = e.OriginalSource as DependencyObject;
@@ -548,20 +604,19 @@ public partial class MainWindow : Window
 
         e.Effects = DragDropEffects.Move;
 
-        // Controlled Auto-Scroll: smooth ramp between 1.2px and 4.0px per tick
         Point mousePos = e.GetPosition(LstApps);
-        const double edgeThreshold = 30.0;
+        const double edgeThreshold = 35.0;
 
         if (mousePos.Y >= 0 && mousePos.Y < edgeThreshold)
         {
             double speedFactor = (edgeThreshold - mousePos.Y) / edgeThreshold;
-            _autoScrollDelta = -(1.2 + (speedFactor * 2.8));
+            _autoScrollDelta = -(1.5 + (speedFactor * 1.5));
             if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
         }
         else if (mousePos.Y > LstApps.ActualHeight - edgeThreshold && mousePos.Y <= LstApps.ActualHeight)
         {
             double speedFactor = (mousePos.Y - (LstApps.ActualHeight - edgeThreshold)) / edgeThreshold;
-            _autoScrollDelta = (1.2 + (speedFactor * 2.8));
+            _autoScrollDelta = (1.5 + (speedFactor * 1.5));
             if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
         }
         else
@@ -569,7 +624,6 @@ public partial class MainWindow : Window
             StopAutoScroll();
         }
 
-        // Dotted insertion hint line
         var hit = e.OriginalSource as DependencyObject;
         var targetItem = FindVisualParent<ListBoxItem>(hit);
 
@@ -706,6 +760,7 @@ public partial class MainWindow : Window
             TxtArgs.Text = item.App.AppParams;
             TxtGroup.Text = item.App.AppGroup;
             TxtCustomIcon.Text = item.App.CustomIconPath;
+            CmbTrayCol.SelectedIndex = Math.Clamp(item.App.Column, 0, 4);
             UpdateEditIconPreview();
         }
     }
@@ -772,6 +827,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        int selectedCol = CmbTrayCol.SelectedIndex; // 0 = Auto, 1 = Col 1, etc.
+
         if (_editingApp != null)
         {
             IconHelper.InvalidateCache(_editingApp.AppTitle);
@@ -782,6 +839,7 @@ public partial class MainWindow : Window
             _editingApp.AppParams = TxtArgs.Text.Trim();
             _editingApp.AppGroup = TxtGroup.Text.Trim();
             _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
+            _editingApp.Column = selectedCol;
             _editingApp = null;
         }
         else
@@ -794,7 +852,8 @@ public partial class MainWindow : Window
                 AppLink = TxtPath.Text.Trim(),
                 AppParams = TxtArgs.Text.Trim(),
                 AppGroup = TxtGroup.Text.Trim(),
-                CustomIconPath = TxtCustomIcon.Text.Trim()
+                CustomIconPath = TxtCustomIcon.Text.Trim(),
+                Column = selectedCol
             });
         }
 
@@ -813,6 +872,7 @@ public partial class MainWindow : Window
         TxtArgs.Clear();
         TxtGroup.Clear();
         TxtCustomIcon.Clear();
+        CmbTrayCol.SelectedIndex = 0;
         ImgIconPreview.Source = null;
     }
 
