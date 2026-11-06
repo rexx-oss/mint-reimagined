@@ -86,7 +86,7 @@ public partial class MainWindow : Window
     private InsertionAdorner? _currentAdorner;
     private ListBoxItem? _currentAdornedItem;
 
-    // Controlled Auto-Scroll
+    // Controlled Dynamic Auto-Scroll
     private DispatcherTimer? _autoScrollTimer;
     private double _autoScrollDelta = 0;
     private ScrollViewer? _listScrollViewer;
@@ -96,7 +96,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         LstApps.ItemsSource = _displayList;
 
-        AdaptToScreenResolution();
+        LoadConfig();
+        RestoreWindowState();
 
         var appIcon = LoadMintIcon();
         _notifyIcon = new WinForms.NotifyIcon
@@ -111,7 +112,6 @@ public partial class MainWindow : Window
         {
             if (e.Button == WinForms.MouseButtons.Right && !_settings.UseClassicTrayMenu)
             {
-                // Open Modern Multi-Column Flyout
                 OpenModernTrayFlyout();
             }
         };
@@ -119,7 +119,6 @@ public partial class MainWindow : Window
         _trayLauncher = new TrayLauncherWindow(this);
 
         InitAutoScroll();
-        LoadConfig();
         ThemeManager.ApplyTheme(_settings.Theme);
         SyncPreferences();
         BuildGroupChips();
@@ -129,24 +128,84 @@ public partial class MainWindow : Window
         TrimMemory();
     }
 
+    private void RestoreWindowState()
+    {
+        if (_settings.IsMaximized)
+        {
+            this.WindowState = WindowState.Maximized;
+        }
+        else if (_settings.WindowWidth >= MinWidth && _settings.WindowHeight >= MinHeight)
+        {
+            this.Width = _settings.WindowWidth;
+            this.Height = _settings.WindowHeight;
+            this.WindowState = WindowState.Normal;
+        }
+        else
+        {
+            var workArea = SystemParameters.WorkArea;
+            this.Width = Math.Clamp(workArea.Width * 0.65, 880, 1200);
+            this.Height = Math.Clamp(workArea.Height * 0.70, 560, 800);
+        }
+
+        this.ClearValue(MaxWidthProperty);
+        this.ClearValue(MaxHeightProperty);
+    }
+
+    private void SaveCurrentWindowState()
+    {
+        if (this.WindowState == WindowState.Maximized)
+        {
+            _settings.IsMaximized = true;
+        }
+        else if (this.WindowState == WindowState.Normal)
+        {
+            _settings.IsMaximized = false;
+            _settings.WindowWidth = this.ActualWidth;
+            _settings.WindowHeight = this.ActualHeight;
+        }
+        SaveConfig();
+    }
+
+    public void ShowAndRestore()
+    {
+        Show();
+        if (_settings.IsMaximized)
+        {
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            if (_settings.WindowWidth >= MinWidth && _settings.WindowHeight >= MinHeight)
+            {
+                Width = _settings.WindowWidth;
+                Height = _settings.WindowHeight;
+            }
+        }
+        Activate();
+        TxtSearch.Focus();
+    }
+
+    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+    {
+        e.Cancel = true;
+        SaveCurrentWindowState();
+        Hide();
+        TrimMemory();
+    }
+
+    public void ExitApplication()
+    {
+        SaveCurrentWindowState();
+        _notifyIcon.Visible = false;
+        _notifyIcon.Dispose();
+        Application.Current.Shutdown();
+    }
+
     private void OpenModernTrayFlyout()
     {
         _trayLauncher ??= new TrayLauncherWindow(this);
         _trayLauncher.Open(_settings);
-    }
-
-    private void AdaptToScreenResolution()
-    {
-        var workArea = SystemParameters.WorkArea;
-
-        this.Width = Math.Clamp(workArea.Width * 0.65, 880, 1200);
-        this.Height = Math.Clamp(workArea.Height * 0.70, 560, 800);
-
-        this.MinWidth = 720;
-        this.MinHeight = 500;
-
-        this.ClearValue(MaxWidthProperty);
-        this.ClearValue(MaxHeightProperty);
     }
 
     public static void TrimMemory()
@@ -191,7 +250,7 @@ public partial class MainWindow : Window
     {
         _autoScrollTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(25)
+            Interval = TimeSpan.FromMilliseconds(20)
         };
         _autoScrollTimer.Tick += (s, e) =>
         {
@@ -209,12 +268,10 @@ public partial class MainWindow : Window
     {
         if (!_settings.UseClassicTrayMenu)
         {
-            // Null out context menu so right-click is handled exclusively by MouseClick flyout
             _notifyIcon.ContextMenuStrip = null;
             return;
         }
 
-        // Classic WinForms Menu with Modern Renderer
         var menu = new WinForms.ContextMenuStrip
         {
             Renderer = new ModernTrayRenderer(),
@@ -292,28 +349,6 @@ public partial class MainWindow : Window
         _notifyIcon.ContextMenuStrip = menu;
     }
 
-    public void ShowAndRestore()
-    {
-        Show();
-        WindowState = WindowState.Normal;
-        Activate();
-        TxtSearch.Focus();
-    }
-
-    public void ExitApplication()
-    {
-        _notifyIcon.Visible = false;
-        _notifyIcon.Dispose();
-        Application.Current.Shutdown();
-    }
-
-    private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
-    {
-        e.Cancel = true;
-        Hide();
-        TrimMemory();
-    }
-
     private void LoadConfig()
     {
         try
@@ -352,19 +387,24 @@ public partial class MainWindow : Window
 
     private void SyncPreferences()
     {
-        // Themes
         RbSystem.IsChecked = _settings.Theme == AppTheme.System;
         RbDark.IsChecked = _settings.Theme == AppTheme.Dark;
         RbLight.IsChecked = _settings.Theme == AppTheme.Light;
 
-        // Tray Style
         RbTrayModern.IsChecked = !_settings.UseClassicTrayMenu;
         RbTrayClassic.IsChecked = _settings.UseClassicTrayMenu;
 
-        // Column Count
-        RbCols2.IsChecked = _settings.TrayColumns == 2;
-        RbCols3.IsChecked = _settings.TrayColumns == 3;
-        RbCols4.IsChecked = _settings.TrayColumns == 4;
+        TxtTrayCols.Text = Math.Max(1, _settings.TrayColumns).ToString();
+        TxtAppCol.Text = "0";
+    }
+
+    private void TxtTrayCols_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (int.TryParse(TxtTrayCols.Text.Trim(), out int val) && val >= 1)
+        {
+            _settings.TrayColumns = val;
+            SaveConfig();
+        }
     }
 
     private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
@@ -372,14 +412,6 @@ public partial class MainWindow : Window
         _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
         SaveConfig();
         BuildTrayContextMenu();
-    }
-
-    private void RbCols_Checked(object sender, RoutedEventArgs e)
-    {
-        if (RbCols2.IsChecked == true) _settings.TrayColumns = 2;
-        else if (RbCols3.IsChecked == true) _settings.TrayColumns = 3;
-        else if (RbCols4.IsChecked == true) _settings.TrayColumns = 4;
-        SaveConfig();
     }
 
     private void RbTheme_Checked(object sender, RoutedEventArgs e)
@@ -548,7 +580,7 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // --- Drag & Drop: Smooth Pixel-Level Auto-Scroll & Insertion Adorner ---
+    // --- Dynamic Drag Auto-Scroll (Proportional to Drag Distance) ---
     private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var hit = e.OriginalSource as DependencyObject;
@@ -605,18 +637,25 @@ public partial class MainWindow : Window
         e.Effects = DragDropEffects.Move;
 
         Point mousePos = e.GetPosition(LstApps);
+        Point windowPos = e.GetPosition(this);
         const double edgeThreshold = 35.0;
+
+        // Dynamic speed calculation based on drag distance
+        double dragDistance = Math.Abs(windowPos.Y - _dragStartPoint.Y);
+        double distanceSpeedBoost = Math.Clamp(dragDistance / 60.0, 1.0, 8.0);
 
         if (mousePos.Y >= 0 && mousePos.Y < edgeThreshold)
         {
-            double speedFactor = (edgeThreshold - mousePos.Y) / edgeThreshold;
-            _autoScrollDelta = -(1.5 + (speedFactor * 1.5));
+            double penetration = Math.Max(1.0, edgeThreshold - mousePos.Y);
+            double speed = (1.5 + (penetration * 0.35)) * distanceSpeedBoost;
+            _autoScrollDelta = -Math.Clamp(speed, 2.0, 32.0);
             if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
         }
         else if (mousePos.Y > LstApps.ActualHeight - edgeThreshold && mousePos.Y <= LstApps.ActualHeight)
         {
-            double speedFactor = (mousePos.Y - (LstApps.ActualHeight - edgeThreshold)) / edgeThreshold;
-            _autoScrollDelta = (1.5 + (speedFactor * 1.5));
+            double penetration = Math.Max(1.0, mousePos.Y - (LstApps.ActualHeight - edgeThreshold));
+            double speed = (1.5 + (penetration * 0.35)) * distanceSpeedBoost;
+            _autoScrollDelta = Math.Clamp(speed, 2.0, 32.0);
             if (!_autoScrollTimer!.IsEnabled) _autoScrollTimer.Start();
         }
         else
@@ -760,7 +799,7 @@ public partial class MainWindow : Window
             TxtArgs.Text = item.App.AppParams;
             TxtGroup.Text = item.App.AppGroup;
             TxtCustomIcon.Text = item.App.CustomIconPath;
-            CmbTrayCol.SelectedIndex = Math.Clamp(item.App.Column, 0, 4);
+            TxtAppCol.Text = item.App.Column.ToString();
             UpdateEditIconPreview();
         }
     }
@@ -827,7 +866,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        int selectedCol = CmbTrayCol.SelectedIndex; // 0 = Auto, 1 = Col 1, etc.
+        int.TryParse(TxtAppCol.Text.Trim(), out int assignedCol);
 
         if (_editingApp != null)
         {
@@ -839,7 +878,7 @@ public partial class MainWindow : Window
             _editingApp.AppParams = TxtArgs.Text.Trim();
             _editingApp.AppGroup = TxtGroup.Text.Trim();
             _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
-            _editingApp.Column = selectedCol;
+            _editingApp.Column = Math.Max(0, assignedCol);
             _editingApp = null;
         }
         else
@@ -853,7 +892,7 @@ public partial class MainWindow : Window
                 AppParams = TxtArgs.Text.Trim(),
                 AppGroup = TxtGroup.Text.Trim(),
                 CustomIconPath = TxtCustomIcon.Text.Trim(),
-                Column = selectedCol
+                Column = Math.Max(0, assignedCol)
             });
         }
 
@@ -872,7 +911,7 @@ public partial class MainWindow : Window
         TxtArgs.Clear();
         TxtGroup.Clear();
         TxtCustomIcon.Clear();
-        CmbTrayCol.SelectedIndex = 0;
+        TxtAppCol.Text = "0";
         ImgIconPreview.Source = null;
     }
 
