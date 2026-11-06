@@ -1,0 +1,62 @@
+name: Release Mint Launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release version tag (e.g. v0.1.0)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build Framework-Dependent (Micro)
+      run: >
+        dotnet publish Mint.csproj 
+        -c Release 
+        -r win-x64 
+        --self-contained false 
+        -p:PublishSingleFile=true 
+        -o ./dist-micro
+
+    - name: Build Standalone
+      run: >
+        dotnet publish Mint.csproj 
+        -c Release 
+        -r win-x64 
+        --self-contained true 
+        -p:PublishSingleFile=true 
+        -p:IncludeNativeLibrariesForSelfExtract=true 
+        -p:EnableCompressionInSingleFile=true 
+        -o ./dist-standalone
+
+    - name: Prepare Named Executables
+      run: |
+        Move-Item ./dist-standalone/Mint.exe ./dist-standalone/Mint-Standalone-x64.exe
+        Move-Item ./dist-micro/Mint.exe ./dist-micro/Mint-Micro-x64.exe
+
+    - name: Publish to GitHub Releases
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ inputs.tag_name }}
+        name: Mint Launcher ${{ inputs.tag_name }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          ./dist-standalone/Mint-Standalone-x64.exe
+          ./dist-micro/Mint-Micro-x64.exe
