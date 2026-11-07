@@ -127,7 +127,6 @@ public partial class MainWindow : Window
         RefreshList();
         BuildTrayContextMenu();
 
-        // Open last active view
         SwitchToTab(_settings.ActiveViewTab);
 
         TrimMemory();
@@ -402,7 +401,6 @@ public partial class MainWindow : Window
         TxtColCountDisplay.Text = Math.Max(1, _settings.TrayColumns).ToString();
     }
 
-    // --- TAB SWITCHING (Classic vs Column Board) ---
     private void BtnTabClassic_Click(object sender, RoutedEventArgs e) => SwitchToTab(0);
     private void BtnTabColumns_Click(object sender, RoutedEventArgs e) => SwitchToTab(1);
 
@@ -433,7 +431,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // --- VISUAL MULTI-COLUMN BOARD LOGIC ---
     private void BuildMultiColumnBoard()
     {
         PanelIconDock.Children.Clear();
@@ -442,7 +439,7 @@ public partial class MainWindow : Window
         int totalCols = Math.Max(1, _settings.TrayColumns);
         TxtColCountDisplay.Text = totalCols.ToString();
 
-        // 1. Populate Available Apps Icon Dock (Compact Icons)
+        // 1. Populate Icon Dock
         foreach (var app in _settings.Apps)
         {
             var iconBox = new Border
@@ -458,14 +455,13 @@ public partial class MainWindow : Window
                 ToolTip = $"{app.AppTitle}\nColumn: {(app.Column > 0 ? app.Column.ToString() : "Auto")}\n{app.AppLink}"
             };
 
-            var img = new System.Windows.Controls.Image { Width = 22, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var img = new Image { Width = 22, Height = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle).ContinueWith(t =>
             {
                 if (t.Result != null) Dispatcher.Invoke(() => img.Source = t.Result);
             });
             iconBox.Child = img;
 
-            // Start Drag from Icon Dock
             iconBox.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
             iconBox.MouseMove += (s, e) =>
             {
@@ -484,7 +480,7 @@ public partial class MainWindow : Window
             PanelIconDock.Children.Add(iconBox);
         }
 
-        // 2. Build Column Drop Target Boxes
+        // 2. Build Column Target Boxes
         var colBuckets = new List<List<AppItem>>();
         for (int i = 0; i < totalCols; i++) colBuckets.Add(new List<AppItem>());
 
@@ -515,7 +511,7 @@ public partial class MainWindow : Window
             colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             colGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            // Column Header with Title, Count Badge, and [X] Delete Column button
+            // Column Header
             var colHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -525,7 +521,6 @@ public partial class MainWindow : Window
             var titleTxt = new TextBlock { Text = $"Column {colNum}", FontWeight = FontWeights.Bold, FontSize = 12, Foreground = (Brush)Application.Current.Resources["TextPrimary"] };
             var badgeTxt = new TextBlock { Text = $"{colBuckets[i].Count} apps", FontSize = 10, Foreground = (Brush)Application.Current.Resources["TextSecondary"], VerticalAlignment = VerticalAlignment.Center };
             
-            // Delete Column [X] button
             var btnDeleteCol = new Button
             {
                 Content = "✕",
@@ -541,7 +536,7 @@ public partial class MainWindow : Window
                 Cursor = Cursors.Hand,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            btnDeleteCol.MouseEnter += (s, e) => btnDeleteCol.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+            btnDeleteCol.MouseEnter += (s, e) => btnDeleteCol.Foreground = new SolidColorBrush(Color.FromRgb(239, 68, 68));
             btnDeleteCol.MouseLeave += (s, e) => btnDeleteCol.Foreground = (Brush)Application.Current.Resources["TextSecondary"];
             btnDeleteCol.Click += (s, e) => DeleteSpecificColumn(colNum);
 
@@ -553,7 +548,6 @@ public partial class MainWindow : Window
             colHeader.Children.Add(btnDeleteCol);
             Grid.SetRow(colHeader, 0);
 
-            // Column App List
             var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             var listStack = new StackPanel { MinHeight = 150 };
 
@@ -575,7 +569,7 @@ public partial class MainWindow : Window
                 cardGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 cardGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
-                var cImg = new System.Windows.Controls.Image { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
+                var cImg = new Image { Width = 16, Height = 16, VerticalAlignment = VerticalAlignment.Center };
                 IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle).ContinueWith(t =>
                 {
                     if (t.Result != null) Dispatcher.Invoke(() => cImg.Source = t.Result);
@@ -585,7 +579,6 @@ public partial class MainWindow : Window
                 var cTxt = new TextBlock { Text = app.AppTitle, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = (Brush)Application.Current.Resources["TextPrimary"], VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
                 Grid.SetColumn(cTxt, 1);
 
-                // Quick remove button
                 var btnRemove = new Button { Content = "✕", Background = Brushes.Transparent, Foreground = (Brush)Application.Current.Resources["TextSecondary"], BorderThickness = new Thickness(0), Padding = new Thickness(4, 0, 4, 0), FontSize = 10, Cursor = Cursors.Hand };
                 btnRemove.Click += (s, e) =>
                 {
@@ -601,7 +594,6 @@ public partial class MainWindow : Window
                 cardGrid.Children.Add(btnRemove);
                 card.Child = cardGrid;
 
-                // Start Drag
                 card.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
                 card.MouseMove += (s, e) =>
                 {
@@ -617,7 +609,6 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Reordering inside column by dropping directly on another card
                 card.DragOver += (s, e) =>
                 {
                     e.Effects = DragDropEffects.Move;
@@ -665,7 +656,6 @@ public partial class MainWindow : Window
             colGrid.Children.Add(scroll);
             colBorder.Child = colGrid;
 
-            // Handle Drop into this Column (on empty container space)
             colBorder.DragOver += (s, e) =>
             {
                 e.Effects = DragDropEffects.Move;
@@ -678,8 +668,6 @@ public partial class MainWindow : Window
                 if (targetApp != null)
                 {
                     targetApp.Column = colNum;
-
-                    // Move to end of this column in the order
                     int lastInCol = _settings.Apps.FindLastIndex(a => a.Column == colNum && a != targetApp);
                     if (lastInCol >= 0)
                     {
@@ -702,40 +690,39 @@ public partial class MainWindow : Window
         }
     }
 
-    // Delete a specific column with warning prompt if it contains apps
+    // Unified Modern Warning Prompt for Deleting Columns
     private void DeleteSpecificColumn(int colNum)
     {
         if (_settings.TrayColumns <= 1)
         {
-            MessageBox.Show("You must have at least 1 column.", "Mint", MessageBoxButton.OK, MessageBoxImage.Information);
+            ModernDialog.Show(this, "You must have at least 1 column for the tray launcher.", "Mint");
             return;
         }
 
         var appsInCol = _settings.Apps.Where(a => a.Column == colNum).ToList();
         if (appsInCol.Count > 0)
         {
-            var result = MessageBox.Show(
-                $"Column {colNum} contains {appsInCol.Count} app(s).\n\nDo you want to delete this column and move its apps back to the unassigned dock?",
+            bool proceed = ModernDialog.Confirm(
+                this,
+                $"Column {colNum} contains {appsInCol.Count} app(s).\n\nAre you sure you want to delete this column? Its apps will be safely moved back to the unassigned dock.",
                 "Delete Column",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning);
+                "Delete Column",
+                "Cancel",
+                true); // Red danger button
 
-            if (result != MessageBoxResult.Yes) return;
+            if (!proceed) return;
         }
 
-        // 1. Reset apps in the deleted column to Auto (Column 0)
         foreach (var app in appsInCol)
         {
             app.Column = 0;
         }
 
-        // 2. Shift subsequent columns down by 1 (e.g. Column 3 becomes Column 2)
         foreach (var app in _settings.Apps.Where(a => a.Column > colNum))
         {
             app.Column--;
         }
 
-        // 3. Decrement total column count
         _settings.TrayColumns--;
         SaveConfig();
         BuildMultiColumnBoard();
@@ -749,7 +736,7 @@ public partial class MainWindow : Window
         var targetApp = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
         if (targetApp != null)
         {
-            targetApp.Column = 0; // Reset to Auto
+            targetApp.Column = 0;
             SaveConfig();
             BuildMultiColumnBoard();
             BuildTrayContextMenu();
@@ -766,7 +753,6 @@ public partial class MainWindow : Window
 
     private void BtnDecCols_Click(object sender, RoutedEventArgs e)
     {
-        // Deleting the last column triggers the check and warning if it contains apps
         DeleteSpecificColumn(_settings.TrayColumns);
     }
 
@@ -782,7 +768,6 @@ public partial class MainWindow : Window
         BuildTrayContextMenu();
     }
 
-    // --- PREFERENCES LOGIC ---
     private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
     {
         _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
@@ -903,7 +888,7 @@ public partial class MainWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not launch item:\n{ex.Message}", "Mint", MessageBoxButton.OK, MessageBoxImage.Error);
+            ModernDialog.Show(this, $"Could not launch item:\n{ex.Message}", "Launch Error");
         }
     }
 
@@ -957,7 +942,6 @@ public partial class MainWindow : Window
         return null;
     }
 
-    // --- Dynamic Drag Auto-Scroll (Classic Tab) ---
     private void LstApps_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         var hit = e.OriginalSource as DependencyObject;
@@ -1138,14 +1122,23 @@ public partial class MainWindow : Window
         }
     }
 
+    // Unified Modern Confirmation for Sorting
     private void BtnSortAZ_Click(object sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("Sort all apps alphabetically from A to Z?", "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        bool confirm = ModernDialog.Confirm(
+            this,
+            "Are you sure you want to sort all apps alphabetically from A to Z?",
+            "Sort Apps",
+            "Sort A → Z",
+            "Cancel");
+
+        if (confirm)
         {
             _settings.Apps = _settings.Apps.OrderBy(a => a.AppTitle).ToList();
             SaveConfig();
             RefreshList(TxtSearch.Text);
             BuildTrayContextMenu();
+            if (_settings.ActiveViewTab == 1) BuildMultiColumnBoard();
         }
     }
 
@@ -1234,11 +1227,12 @@ public partial class MainWindow : Window
         }
     }
 
+    // Unified Modern Validation Alert
     private void BtnSave_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(TxtTitle.Text) || string.IsNullOrWhiteSpace(TxtPath.Text))
         {
-            MessageBox.Show("Please provide a Title and Target path.", "Mint", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ModernDialog.Show(this, "Please provide both an App Title and a Target path.", "Validation");
             return;
         }
 
@@ -1272,6 +1266,7 @@ public partial class MainWindow : Window
         BuildGroupChips();
         RefreshList();
         BuildTrayContextMenu();
+        if (_settings.ActiveViewTab == 1) BuildMultiColumnBoard();
         BtnClear_Click(this, new RoutedEventArgs());
     }
 
@@ -1346,6 +1341,7 @@ public partial class MainWindow : Window
                 BuildGroupChips();
                 RefreshList();
                 BuildTrayContextMenu();
+                if (_settings.ActiveViewTab == 1) BuildMultiColumnBoard();
             }
         }
     }
