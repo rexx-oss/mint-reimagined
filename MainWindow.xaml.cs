@@ -127,7 +127,7 @@ public partial class MainWindow : Window
         RefreshList();
         BuildTrayContextMenu();
 
-        // Switch to the saved tab
+        // Open last active view
         SwitchToTab(_settings.ActiveViewTab);
 
         TrimMemory();
@@ -515,17 +515,42 @@ public partial class MainWindow : Window
             colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             colGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            // Column Header
+            // Column Header with Title, Count Badge, and [X] Delete Column button
             var colHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var titleTxt = new TextBlock { Text = $"Column {colNum}", FontWeight = FontWeights.Bold, FontSize = 12, Foreground = (Brush)Application.Current.Resources["TextPrimary"] };
             var badgeTxt = new TextBlock { Text = $"{colBuckets[i].Count} apps", FontSize = 10, Foreground = (Brush)Application.Current.Resources["TextSecondary"], VerticalAlignment = VerticalAlignment.Center };
+            
+            // Delete Column [X] button
+            var btnDeleteCol = new Button
+            {
+                Content = "✕",
+                ToolTip = $"Delete Column {colNum}",
+                Width = 20,
+                Height = 20,
+                Padding = new Thickness(0),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                Background = Brushes.Transparent,
+                Foreground = (Brush)Application.Current.Resources["TextSecondary"],
+                BorderThickness = new Thickness(0),
+                Cursor = Cursors.Hand,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            btnDeleteCol.MouseEnter += (s, e) => btnDeleteCol.Foreground = new SolidColorBrush(System.Windows.Media.Color.FromRgb(239, 68, 68));
+            btnDeleteCol.MouseLeave += (s, e) => btnDeleteCol.Foreground = (Brush)Application.Current.Resources["TextSecondary"];
+            btnDeleteCol.Click += (s, e) => DeleteSpecificColumn(colNum);
+
             Grid.SetColumn(titleTxt, 0);
             Grid.SetColumn(badgeTxt, 1);
+            Grid.SetColumn(btnDeleteCol, 3);
             colHeader.Children.Add(titleTxt);
             colHeader.Children.Add(badgeTxt);
+            colHeader.Children.Add(btnDeleteCol);
             Grid.SetRow(colHeader, 0);
 
             // Column App List
@@ -541,7 +566,8 @@ public partial class MainWindow : Window
                     Padding = new Thickness(6, 4, 6, 4),
                     Margin = new Thickness(0, 2, 0, 2),
                     Cursor = Cursors.Hand,
-                    BorderThickness = new Thickness(0)
+                    BorderThickness = new Thickness(0),
+                    AllowDrop = true
                 };
 
                 var cardGrid = new Grid();
@@ -575,7 +601,7 @@ public partial class MainWindow : Window
                 cardGrid.Children.Add(btnRemove);
                 card.Child = cardGrid;
 
-                // Dragging app between columns
+                // Start Drag
                 card.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
                 card.MouseMove += (s, e) =>
                 {
@@ -591,6 +617,45 @@ public partial class MainWindow : Window
                     }
                 };
 
+                // Reordering inside column by dropping directly on another card
+                card.DragOver += (s, e) =>
+                {
+                    e.Effects = DragDropEffects.Move;
+                    e.Handled = true;
+                };
+
+                card.Drop += (s, e) =>
+                {
+                    var dragged = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
+                    if (dragged != null && dragged != app)
+                    {
+                        dragged.Column = colNum;
+
+                        Point pos = e.GetPosition(card);
+                        bool isAfter = pos.Y > card.ActualHeight / 2;
+
+                        int oldIndex = _settings.Apps.IndexOf(dragged);
+                        int targetIndex = _settings.Apps.IndexOf(app);
+
+                        if (oldIndex >= 0 && targetIndex >= 0)
+                        {
+                            if (isAfter && targetIndex < oldIndex) targetIndex++;
+                            else if (!isAfter && targetIndex > oldIndex) targetIndex--;
+
+                            if (oldIndex != targetIndex && targetIndex >= 0 && targetIndex < _settings.Apps.Count)
+                            {
+                                _settings.Apps.RemoveAt(oldIndex);
+                                _settings.Apps.Insert(targetIndex, dragged);
+                            }
+                        }
+
+                        SaveConfig();
+                        BuildMultiColumnBoard();
+                        BuildTrayContextMenu();
+                        e.Handled = true;
+                    }
+                };
+
                 listStack.Children.Add(card);
             }
 
@@ -600,18 +665,33 @@ public partial class MainWindow : Window
             colGrid.Children.Add(scroll);
             colBorder.Child = colGrid;
 
-            // Handle Drop into this Column
+            // Handle Drop into this Column (on empty container space)
             colBorder.DragOver += (s, e) =>
             {
                 e.Effects = DragDropEffects.Move;
                 e.Handled = true;
             };
+
             colBorder.Drop += (s, e) =>
             {
                 var targetApp = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
                 if (targetApp != null)
                 {
                     targetApp.Column = colNum;
+
+                    // Move to end of this column in the order
+                    int lastInCol = _settings.Apps.FindLastIndex(a => a.Column == colNum && a != targetApp);
+                    if (lastInCol >= 0)
+                    {
+                        int oldIdx = _settings.Apps.IndexOf(targetApp);
+                        if (oldIdx >= 0)
+                        {
+                            _settings.Apps.RemoveAt(oldIdx);
+                            int insertIdx = lastInCol > oldIdx ? lastInCol : lastInCol + 1;
+                            _settings.Apps.Insert(Math.Min(insertIdx, _settings.Apps.Count), targetApp);
+                        }
+                    }
+
                     SaveConfig();
                     BuildMultiColumnBoard();
                     BuildTrayContextMenu();
@@ -620,6 +700,46 @@ public partial class MainWindow : Window
 
             PanelBoardColumns.Children.Add(colBorder);
         }
+    }
+
+    // Delete a specific column with warning prompt if it contains apps
+    private void DeleteSpecificColumn(int colNum)
+    {
+        if (_settings.TrayColumns <= 1)
+        {
+            MessageBox.Show("You must have at least 1 column.", "Mint", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var appsInCol = _settings.Apps.Where(a => a.Column == colNum).ToList();
+        if (appsInCol.Count > 0)
+        {
+            var result = MessageBox.Show(
+                $"Column {colNum} contains {appsInCol.Count} app(s).\n\nDo you want to delete this column and move its apps back to the unassigned dock?",
+                "Delete Column",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning);
+
+            if (result != MessageBoxResult.Yes) return;
+        }
+
+        // 1. Reset apps in the deleted column to Auto (Column 0)
+        foreach (var app in appsInCol)
+        {
+            app.Column = 0;
+        }
+
+        // 2. Shift subsequent columns down by 1 (e.g. Column 3 becomes Column 2)
+        foreach (var app in _settings.Apps.Where(a => a.Column > colNum))
+        {
+            app.Column--;
+        }
+
+        // 3. Decrement total column count
+        _settings.TrayColumns--;
+        SaveConfig();
+        BuildMultiColumnBoard();
+        BuildTrayContextMenu();
     }
 
     private void DockPool_DragOver(object sender, DragEventArgs e) => e.Effects = DragDropEffects.Move;
@@ -646,13 +766,8 @@ public partial class MainWindow : Window
 
     private void BtnDecCols_Click(object sender, RoutedEventArgs e)
     {
-        if (_settings.TrayColumns > 1)
-        {
-            _settings.TrayColumns--;
-            SaveConfig();
-            BuildMultiColumnBoard();
-            BuildTrayContextMenu();
-        }
+        // Deleting the last column triggers the check and warning if it contains apps
+        DeleteSpecificColumn(_settings.TrayColumns);
     }
 
     private void BtnAutoBalance_Click(object sender, RoutedEventArgs e)
