@@ -55,7 +55,6 @@ public partial class TrayLauncherWindow : Window
     private void BuildColumns(AppSettings settings)
     {
         PanelColumns.Children.Clear();
-        // Support as many columns as configured (minimum 1)
         int totalCols = Math.Max(1, settings.TrayColumns);
 
         var colBuckets = new List<List<AppItem>>();
@@ -181,7 +180,7 @@ public partial class TrayLauncherWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"Could not launch item:\n{ex.Message}", "Mint", MessageBoxButton.OK, MessageBoxImage.Error);
+            ModernDialog.Show(this, $"Could not launch item:\n{ex.Message}", "Launch Error");
         }
     }
 
