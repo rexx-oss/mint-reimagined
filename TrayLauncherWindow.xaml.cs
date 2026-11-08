@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
 using WinForms = System.Windows.Forms;
 
 namespace Mint;
@@ -17,6 +18,10 @@ public partial class TrayLauncherWindow : Window
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetCursorPos(out POINT lpPoint);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct POINT { public int X; public int Y; }
@@ -32,23 +37,35 @@ public partial class TrayLauncherWindow : Window
     public void Open(AppSettings settings)
     {
         BuildColumns(settings);
-        UpdateLayout();
 
+        // 1. Ensure the Win32 window handle exists so DPI and metrics are active
+        var handle = new WindowInteropHelper(this).EnsureHandle();
+
+        // 2. Pre-measure the window layout so we have true dimensions BEFORE positioning
+        this.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double targetWidth = this.DesiredSize.Width > 0 ? this.DesiredSize.Width : 420;
+        double targetHeight = this.DesiredSize.Height > 0 ? this.DesiredSize.Height : 300;
+
+        // 3. Find the exact screen where the mouse cursor / tray icon is located
         GetCursorPos(out var pt);
         var screen = WinForms.Screen.FromPoint(new System.Drawing.Point(pt.X, pt.Y));
         var wa = screen.WorkingArea;
 
-        var source = PresentationSource.FromVisual(this);
-        double dpiX = source?.CompositionTarget?.TransformToDevice.M11 ?? 1.5;
-        double dpiY = source?.CompositionTarget?.TransformToDevice.M22 ?? 1.5;
+        // 4. Calculate accurate DPI scaling (e.g. 150%)
+        var dpi = VisualTreeHelper.GetDpi(this);
+        double dpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.5;
+        double dpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.5;
 
         double waRightDIP = wa.Right / dpiX;
         double waBottomDIP = wa.Bottom / dpiY;
 
-        this.Left = Math.Max(10, waRightDIP - this.ActualWidth - 10);
-        this.Top = Math.Max(10, waBottomDIP - this.ActualHeight - 10);
+        // 5. Position cleanly above the taskbar on the very first click
+        this.Left = Math.Max(10, waRightDIP - targetWidth - 10);
+        this.Top = Math.Max(10, waBottomDIP - targetHeight - 10);
 
+        // 6. Display and force foreground activation
         this.Show();
+        SetForegroundWindow(handle);
         this.Activate();
     }
 
@@ -85,7 +102,7 @@ public partial class TrayLauncherWindow : Window
                 var divider = new Border
                 {
                     Width = 1,
-                    Background = (System.Windows.Media.Brush)Application.Current.Resources["BorderColor"],
+                    Background = (Brush)Application.Current.Resources["BorderColor"],
                     Margin = new Thickness(6, 2, 6, 2)
                 };
                 PanelColumns.Children.Add(divider);
@@ -110,7 +127,7 @@ public partial class TrayLauncherWindow : Window
     {
         var card = new Border
         {
-            Background = (System.Windows.Media.Brush)Application.Current.Resources["InputBg"],
+            Background = (Brush)Application.Current.Resources["InputBg"],
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(8, 6, 8, 6),
             Margin = new Thickness(0, 2, 0, 2),
@@ -139,7 +156,7 @@ public partial class TrayLauncherWindow : Window
             Text = app.AppTitle,
             FontWeight = FontWeights.SemiBold,
             FontSize = 12,
-            Foreground = (System.Windows.Media.Brush)Application.Current.Resources["TextPrimary"],
+            Foreground = (Brush)Application.Current.Resources["TextPrimary"],
             VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
             Margin = new Thickness(6, 0, 2, 0)
@@ -150,8 +167,8 @@ public partial class TrayLauncherWindow : Window
         grid.Children.Add(txt);
         card.Child = grid;
 
-        card.MouseEnter += (s, e) => card.Background = (System.Windows.Media.Brush)Application.Current.Resources["CardHoverBg"];
-        card.MouseLeave += (s, e) => card.Background = (System.Windows.Media.Brush)Application.Current.Resources["InputBg"];
+        card.MouseEnter += (s, e) => card.Background = (Brush)Application.Current.Resources["CardHoverBg"];
+        card.MouseLeave += (s, e) => card.Background = (Brush)Application.Current.Resources["InputBg"];
         card.MouseLeftButtonUp += (s, e) =>
         {
             Hide();
