@@ -32,41 +32,62 @@ public partial class TrayLauncherWindow : Window
     {
         InitializeComponent();
         _mainWindow = mainWindow;
+
+        // Auto-reposition the moment WPF finishes calculating real dimensions
+        this.SizeChanged += (s, e) =>
+        {
+            if (this.IsVisible && e.NewSize.Width > 0 && e.NewSize.Height > 0)
+            {
+                RepositionAboveTaskbar(e.NewSize.Width, e.NewSize.Height);
+            }
+        };
     }
 
     public void Open(AppSettings settings)
     {
         BuildColumns(settings);
 
-        // 1. Ensure the Win32 window handle exists so DPI and metrics are active
+        // 1. Ensure the Win32 window handle exists
         var handle = new WindowInteropHelper(this).EnsureHandle();
 
-        // 2. Pre-measure the window layout so we have true dimensions BEFORE positioning
-        this.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        double targetWidth = this.DesiredSize.Width > 0 ? this.DesiredSize.Width : 420;
-        double targetHeight = this.DesiredSize.Height > 0 ? this.DesiredSize.Height : 300;
+        // 2. Measure the root container directly to get true dimensions on the 1st click
+        double targetWidth = 400;
+        double targetHeight = 300;
 
-        // 3. Find the exact screen where the mouse cursor / tray icon is located
+        if (this.Content is FrameworkElement root)
+        {
+            root.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            if (root.DesiredSize.Width > 0) targetWidth = root.DesiredSize.Width;
+            if (root.DesiredSize.Height > 0) targetHeight = root.DesiredSize.Height;
+        }
+
+        // 3. Position accurately on screen before showing
+        RepositionAboveTaskbar(targetWidth, targetHeight);
+
+        // 4. Show and lock foreground focus
+        this.Show();
+        SetForegroundWindow(handle);
+        this.Activate();
+    }
+
+    private void RepositionAboveTaskbar(double width, double height)
+    {
         GetCursorPos(out var pt);
         var screen = WinForms.Screen.FromPoint(new System.Drawing.Point(pt.X, pt.Y));
         var wa = screen.WorkingArea;
 
-        // 4. Calculate accurate DPI scaling (e.g. 150%)
         var dpi = VisualTreeHelper.GetDpi(this);
         double dpiX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.5;
         double dpiY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.5;
 
+        double waLeftDIP = wa.Left / dpiX;
+        double waTopDIP = wa.Top / dpiY;
         double waRightDIP = wa.Right / dpiX;
         double waBottomDIP = wa.Bottom / dpiY;
 
-        // 5. Position cleanly above the taskbar on the very first click
-        this.Left = Math.Max(10, waRightDIP - targetWidth - 10);
-        this.Top = Math.Max(10, waBottomDIP - targetHeight - 10);
-
-        // 6. Display and force foreground activation
-        this.Show();
-        SetForegroundWindow(handle);
-        this.Activate();
+        // Clamp inside working area so it can NEVER overflow off-screen
+        this.Left = Math.Clamp(waRightDIP - width - 10, waLeftDIP + 10, waRightDIP - width);
+        this.Top = Math.Clamp(waBottomDIP - height - 10, waTopDIP + 10, waBottomDIP - height);
     }
 
     private void BuildColumns(AppSettings settings)
