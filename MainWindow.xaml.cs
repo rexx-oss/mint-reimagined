@@ -81,6 +81,9 @@ public partial class MainWindow : Window
     private AppItem? _editingApp;
     private string _activeGroupFilter = "All";
 
+    // Race-condition prevention token for async list refreshes
+    private int _refreshCounter = 0;
+
     // Drag & Drop State
     private Point _dragStartPoint;
     private AppDisplayItem? _draggedItem;
@@ -124,9 +127,9 @@ public partial class MainWindow : Window
         ThemeManager.ApplyTheme(_settings.Theme);
         SyncPreferences();
         BuildGroupChips();
-        RefreshList();
         BuildTrayContextMenu();
 
+        // Single clean load: SwitchToTab handles populating the initial view without duplicating calls
         SwitchToTab(_settings.ActiveViewTab);
 
         TrimMemory();
@@ -138,7 +141,6 @@ public partial class MainWindow : Window
         UpdateTitleBarTheme(ThemeManager.IsDarkThemeActive);
     }
 
-    // Tells Windows DWM to color the native window title bar in dark/light mode
     private void UpdateTitleBarTheme(bool isDark)
     {
         try
@@ -147,7 +149,6 @@ public partial class MainWindow : Window
             if (hwnd == IntPtr.Zero) return;
 
             int useDark = isDark ? 1 : 0;
-            // DWMWA_USE_IMMERSIVE_DARK_MODE: 20 on Windows 10 20H1+ and Windows 11; 19 on older Windows 10
             if (DwmSetWindowAttribute(hwnd, 20, ref useDark, sizeof(int)) != 0)
             {
                 DwmSetWindowAttribute(hwnd, 19, ref useDark, sizeof(int));
@@ -249,7 +250,6 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    // Memory-first extraction: reads embedded icon from binary directly without extracting to Temp
     private System.Drawing.Icon LoadMintIcon()
     {
         try
@@ -855,9 +855,11 @@ public partial class MainWindow : Window
         }
     }
 
+    // Prevents async race conditions: any newly triggered refresh invalidates and cancels older runs
     private async void RefreshList(string filter = "")
     {
-        _displayList.Clear();
+        int currentGen = unchecked(++_refreshCounter);
+
         var query = _settings.Apps.AsEnumerable();
 
         if (_activeGroupFilter != "All")
@@ -867,10 +869,26 @@ public partial class MainWindow : Window
             query = query.Where(a => a.AppTitle.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
                                      a.AppGroup.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
-        foreach (var app in query)
+        var appList = query.ToList();
+        var items = new List<AppDisplayItem>();
+
+        foreach (var app in appList)
         {
             var icon = await IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle);
-            _displayList.Add(new AppDisplayItem { App = app, Icon = icon });
+            
+            // Abort if a newer refresh was triggered while awaiting icon load
+            if (currentGen != _refreshCounter) return;
+
+            items.Add(new AppDisplayItem { App = app, Icon = icon });
+        }
+
+        if (currentGen != _refreshCounter) return;
+
+        // Atomically replace display list items to prevent interleaved duplicates
+        _displayList.Clear();
+        foreach (var item in items)
+        {
+            _displayList.Add(item);
         }
 
         TxtFooterCount.Text = $"{_displayList.Count} of {_settings.Apps.Count} Apps";
