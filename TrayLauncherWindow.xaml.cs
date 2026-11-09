@@ -220,9 +220,19 @@ public partial class TrayLauncherWindow : Window
         {
             ModernDialog.Show(this, $"Could not launch item:\n{ex.Message}", "Launch Error");
         }
+        finally
+        {
+            // Flush DirectX GPU memory down to ~15-20 MB after launching
+            MainWindow.TrimMemory();
+        }
     }
 
-    private void Window_Deactivated(object sender, EventArgs e) => Hide();
+    private void Window_Deactivated(object sender, EventArgs e)
+    {
+        Hide();
+        // Flush memory when the user clicks away without launching an app
+        MainWindow.TrimMemory();
+    }
 
     private void BtnSettings_Click(object sender, RoutedEventArgs e)
     {
