@@ -49,7 +49,7 @@ public class InsertionAdorner : Adorner
         _brush = brush;
         _pen = new System.Windows.Media.Pen(brush, 2)
         {
-            DashStyle = DashStyles.Dash
+            DashStyle = System.Windows.Media.DashStyles.Dash
         };
         IsHitTestVisible = false;
     }
@@ -132,6 +132,30 @@ public partial class MainWindow : Window
         TrimMemory();
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        UpdateTitleBarTheme(ThemeManager.IsDarkThemeActive);
+    }
+
+    // Tells Windows DWM to color the native window title bar in dark/light mode
+    private void UpdateTitleBarTheme(bool isDark)
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+
+            int useDark = isDark ? 1 : 0;
+            // DWMWA_USE_IMMERSIVE_DARK_MODE: 20 on Windows 10 20H1+ and Windows 11; 19 on older Windows 10
+            if (DwmSetWindowAttribute(hwnd, 20, ref useDark, sizeof(int)) != 0)
+            {
+                DwmSetWindowAttribute(hwnd, 19, ref useDark, sizeof(int));
+            }
+        }
+        catch { }
+    }
+
     private void RestoreWindowState()
     {
         if (_settings.IsMaximized)
@@ -186,6 +210,7 @@ public partial class MainWindow : Window
                 Height = _settings.WindowHeight;
             }
         }
+        UpdateTitleBarTheme(ThemeManager.IsDarkThemeActive);
         Activate();
         TxtSearch.Focus();
     }
@@ -224,17 +249,11 @@ public partial class MainWindow : Window
         catch { }
     }
 
+    // Memory-first extraction: reads embedded icon from binary directly without extracting to Temp
     private System.Drawing.Icon LoadMintIcon()
     {
         try
         {
-            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mint.ico");
-            if (File.Exists(iconPath))
-            {
-                this.Icon = BitmapFrame.Create(new Uri(iconPath));
-                return new System.Drawing.Icon(iconPath);
-            }
-
             if (Environment.ProcessPath != null)
             {
                 var extracted = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath);
@@ -243,6 +262,13 @@ public partial class MainWindow : Window
                     this.Icon = Imaging.CreateBitmapSourceFromHIcon(extracted.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
                     return extracted;
                 }
+            }
+
+            string iconPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "mint.ico");
+            if (File.Exists(iconPath))
+            {
+                this.Icon = BitmapFrame.Create(new Uri(iconPath));
+                return new System.Drawing.Icon(iconPath);
             }
         }
         catch { }
@@ -511,7 +537,6 @@ public partial class MainWindow : Window
             colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             colGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            // Column Header
             var colHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -690,7 +715,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Unified Modern Warning Prompt for Deleting Columns
     private void DeleteSpecificColumn(int colNum)
     {
         if (_settings.TrayColumns <= 1)
@@ -704,11 +728,11 @@ public partial class MainWindow : Window
         {
             bool proceed = ModernDialog.Confirm(
                 this,
-                $"Column {colNum} contains {appsInCol.Count} app(s).\n\nAre you sure you want to delete this column? Its apps will be safely moved back to the unassigned dock.",
+                $"Column {colNum} contains {appsInCol.Count} app(s).\n\nDo you want to delete this column and move its apps back to the unassigned dock?",
                 "Delete Column",
                 "Delete Column",
                 "Cancel",
-                true); // Red danger button
+                true);
 
             if (!proceed) return;
         }
@@ -782,6 +806,7 @@ public partial class MainWindow : Window
         else if (RbLight.IsChecked == true) _settings.Theme = AppTheme.Light;
 
         ThemeManager.ApplyTheme(_settings.Theme);
+        UpdateTitleBarTheme(ThemeManager.IsDarkThemeActive);
         SaveConfig();
         BuildGroupChips();
         BuildTrayContextMenu();
@@ -1122,7 +1147,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Unified Modern Confirmation for Sorting
     private void BtnSortAZ_Click(object sender, RoutedEventArgs e)
     {
         bool confirm = ModernDialog.Confirm(
@@ -1227,7 +1251,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Unified Modern Validation Alert
     private void BtnSave_Click(object sender, RoutedEventArgs e)
     {
         if (string.IsNullOrWhiteSpace(TxtTitle.Text) || string.IsNullOrWhiteSpace(TxtPath.Text))
