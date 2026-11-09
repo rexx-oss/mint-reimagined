@@ -10,16 +10,10 @@
     <ApplicationIcon>mint.ico</ApplicationIcon>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
 
-    <!-- Keep memory footprint lightweight for a tray utility -->
+    <!-- Keep memory footprint lightweight -->
     <ServerGarbageCollection>false</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
   </PropertyGroup>
-
-  <ItemGroup Condition="Exists('mint.ico')">
-    <None Include="mint.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
 
 </Project>
