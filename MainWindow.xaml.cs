@@ -670,6 +670,7 @@ public partial class MainWindow : Window
                 var cTxt = new TextBlock { Text = app.AppTitle, FontSize = 11, FontWeight = FontWeights.SemiBold, Foreground = (Brush)Application.Current.Resources["TextPrimary"], VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6, 0, 4, 0) };
                 Grid.SetColumn(cTxt, 1);
 
+                // Quick remove button
                 var btnRemove = new Button { Content = "✕", Background = Brushes.Transparent, Foreground = (Brush)Application.Current.Resources["TextSecondary"], BorderThickness = new Thickness(0), Padding = new Thickness(4, 0, 4, 0), FontSize = 10, Cursor = Cursors.Hand };
                 btnRemove.Click += (s, e) =>
                 {
@@ -816,12 +817,10 @@ public partial class MainWindow : Window
         }
     }
 
-    // Reorders entire columns and updates all apps inside
     private void MoveColumn(int sourceCol, int targetCol)
     {
         if (sourceCol == targetCol) return;
 
-        // Temporarily park apps of source column at index -1
         foreach (var app in _settings.Apps.Where(a => a.Column == sourceCol))
         {
             app.Column = -1;
@@ -829,7 +828,6 @@ public partial class MainWindow : Window
 
         if (sourceCol < targetCol)
         {
-            // Shift intervening columns down by 1
             foreach (var app in _settings.Apps.Where(a => a.Column > sourceCol && a.Column <= targetCol))
             {
                 app.Column--;
@@ -837,14 +835,12 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Shift intervening columns up by 1
             foreach (var app in _settings.Apps.Where(a => a.Column >= targetCol && a.Column < sourceCol))
             {
                 app.Column++;
             }
         }
 
-        // Place parked apps into the target column
         foreach (var app in _settings.Apps.Where(a => a.Column == -1))
         {
             app.Column = targetCol;
@@ -855,7 +851,6 @@ public partial class MainWindow : Window
         BuildTrayContextMenu();
     }
 
-    // Delete a specific column with unified confirmation dialog
     private void DeleteSpecificColumn(int colNum)
     {
         if (_settings.TrayColumns <= 1)
@@ -921,7 +916,6 @@ public partial class MainWindow : Window
         DeleteSpecificColumn(_settings.TrayColumns);
     }
 
-    // Confirms before running Auto-Balance to prevent accidental clicks
     private void BtnAutoBalance_Click(object sender, RoutedEventArgs e)
     {
         bool proceed = ModernDialog.Confirm(
@@ -943,7 +937,6 @@ public partial class MainWindow : Window
         BuildTrayContextMenu();
     }
 
-    // --- PREFERENCES LOGIC ---
     private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
     {
         _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
@@ -1358,7 +1351,6 @@ public partial class MainWindow : Window
             TxtArgs.Text = item.App.AppParams;
             TxtGroup.Text = item.App.AppGroup;
             TxtCustomIcon.Text = item.App.CustomIconPath;
-            TxtAppCol.Text = item.App.Column.ToString();
             UpdateEditIconPreview();
         }
     }
@@ -1426,8 +1418,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        int.TryParse(TxtAppCol.Text.Trim(), out int assignedCol);
-
         if (_editingApp != null)
         {
             IconHelper.InvalidateCache(_editingApp.AppTitle);
@@ -1438,7 +1428,7 @@ public partial class MainWindow : Window
             _editingApp.AppParams = TxtArgs.Text.Trim();
             _editingApp.AppGroup = TxtGroup.Text.Trim();
             _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
-            _editingApp.Column = Math.Max(0, assignedCol);
+            // Assigned column from the board is preserved
             _editingApp = null;
         }
         else
@@ -1452,7 +1442,7 @@ public partial class MainWindow : Window
                 AppParams = TxtArgs.Text.Trim(),
                 AppGroup = TxtGroup.Text.Trim(),
                 CustomIconPath = TxtCustomIcon.Text.Trim(),
-                Column = Math.Max(0, assignedCol)
+                Column = 0 // Defaults to Pool / Auto
             });
         }
 
@@ -1472,7 +1462,6 @@ public partial class MainWindow : Window
         TxtArgs.Clear();
         TxtGroup.Clear();
         TxtCustomIcon.Clear();
-        TxtAppCol.Text = "0";
         ImgIconPreview.Source = null;
     }
 
