@@ -37,6 +37,12 @@ public class AppDisplayItem
     }
 }
 
+public class ColumnDragData
+{
+    public int ColumnNumber { get; set; }
+    public ColumnDragData(int colNum) => ColumnNumber = colNum;
+}
+
 public class InsertionAdorner : Adorner
 {
     public bool IsAfter { get; set; }
@@ -81,13 +87,14 @@ public partial class MainWindow : Window
     private AppItem? _editingApp;
     private string _activeGroupFilter = "All";
 
-    // Race-condition prevention token for async list refreshes
     private int _refreshCounter = 0;
 
     // Drag & Drop State
     private Point _dragStartPoint;
+    private Point _columnDragStartPoint;
     private AppDisplayItem? _draggedItem;
     private AppItem? _draggedBoardApp;
+    private int _draggedColumnNumber = 0;
     private InsertionAdorner? _currentAdorner;
     private ListBoxItem? _currentAdornedItem;
 
@@ -129,7 +136,6 @@ public partial class MainWindow : Window
         BuildGroupChips();
         BuildTrayContextMenu();
 
-        // Single clean load: SwitchToTab handles populating the initial view without duplicating calls
         SwitchToTab(_settings.ActiveViewTab);
 
         TrimMemory();
@@ -427,6 +433,7 @@ public partial class MainWindow : Window
         TxtColCountDisplay.Text = Math.Max(1, _settings.TrayColumns).ToString();
     }
 
+    // --- TAB SWITCHING ---
     private void BtnTabClassic_Click(object sender, RoutedEventArgs e) => SwitchToTab(0);
     private void BtnTabColumns_Click(object sender, RoutedEventArgs e) => SwitchToTab(1);
 
@@ -457,6 +464,7 @@ public partial class MainWindow : Window
         }
     }
 
+    // --- VISUAL MULTI-COLUMN BOARD LOGIC ---
     private void BuildMultiColumnBoard()
     {
         PanelIconDock.Children.Clear();
@@ -465,7 +473,7 @@ public partial class MainWindow : Window
         int totalCols = Math.Max(1, _settings.TrayColumns);
         TxtColCountDisplay.Text = totalCols.ToString();
 
-        // 1. Populate Icon Dock
+        // 1. Populate Available Apps Icon Dock
         foreach (var app in _settings.Apps)
         {
             var iconBox = new Border
@@ -537,15 +545,51 @@ public partial class MainWindow : Window
             colGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             colGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-            var colHeader = new Grid { Margin = new Thickness(0, 0, 0, 8) };
-            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
-            colHeader.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            // Column Header with Drag Handle, Title, Badge, and [X] Delete Button
+            var colHeader = new Border
+            {
+                Background = (Brush)Application.Current.Resources["CardBg"],
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 0, 0, 8),
+                Cursor = Cursors.SizeAll,
+                ToolTip = "Drag header to reorder this column"
+            };
 
-            var titleTxt = new TextBlock { Text = $"Column {colNum}", FontWeight = FontWeights.Bold, FontSize = 12, Foreground = (Brush)Application.Current.Resources["TextPrimary"] };
-            var badgeTxt = new TextBlock { Text = $"{colBuckets[i].Count} apps", FontSize = 10, Foreground = (Brush)Application.Current.Resources["TextSecondary"], VerticalAlignment = VerticalAlignment.Center };
-            
+            var headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Grip
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Title
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Badge
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(6) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Delete button
+
+            var gripTxt = new TextBlock
+            {
+                Text = "⠿",
+                FontSize = 13,
+                Foreground = (Brush)Application.Current.Resources["TextSecondary"],
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+
+            var titleTxt = new TextBlock
+            {
+                Text = $"Column {colNum}",
+                FontWeight = FontWeights.Bold,
+                FontSize = 12,
+                Foreground = (Brush)Application.Current.Resources["TextPrimary"],
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var badgeTxt = new TextBlock
+            {
+                Text = $"{colBuckets[i].Count}",
+                FontSize = 10,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)Application.Current.Resources["TextSecondary"],
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
             var btnDeleteCol = new Button
             {
                 Content = "✕",
@@ -565,14 +609,36 @@ public partial class MainWindow : Window
             btnDeleteCol.MouseLeave += (s, e) => btnDeleteCol.Foreground = (Brush)Application.Current.Resources["TextSecondary"];
             btnDeleteCol.Click += (s, e) => DeleteSpecificColumn(colNum);
 
-            Grid.SetColumn(titleTxt, 0);
-            Grid.SetColumn(badgeTxt, 1);
-            Grid.SetColumn(btnDeleteCol, 3);
-            colHeader.Children.Add(titleTxt);
-            colHeader.Children.Add(badgeTxt);
-            colHeader.Children.Add(btnDeleteCol);
+            Grid.SetColumn(gripTxt, 0);
+            Grid.SetColumn(titleTxt, 1);
+            Grid.SetColumn(badgeTxt, 2);
+            Grid.SetColumn(btnDeleteCol, 4);
+
+            headerGrid.Children.Add(gripTxt);
+            headerGrid.Children.Add(titleTxt);
+            headerGrid.Children.Add(badgeTxt);
+            headerGrid.Children.Add(btnDeleteCol);
+            colHeader.Child = headerGrid;
+
+            // Start Dragging the Entire Column
+            colHeader.PreviewMouseLeftButtonDown += (s, e) => _columnDragStartPoint = e.GetPosition(null);
+            colHeader.MouseMove += (s, e) =>
+            {
+                if (e.LeftButton == MouseButtonState.Pressed && !btnDeleteCol.IsMouseOver)
+                {
+                    var diff = _columnDragStartPoint - e.GetPosition(null);
+                    if (Math.Abs(diff.X) > 6 || Math.Abs(diff.Y) > 6)
+                    {
+                        _draggedColumnNumber = colNum;
+                        DragDrop.DoDragDrop(colHeader, new ColumnDragData(colNum), DragDropEffects.Move);
+                        _draggedColumnNumber = 0;
+                    }
+                }
+            };
+
             Grid.SetRow(colHeader, 0);
 
+            // Column App List
             var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             var listStack = new StackPanel { MinHeight = 150 };
 
@@ -619,10 +685,11 @@ public partial class MainWindow : Window
                 cardGrid.Children.Add(btnRemove);
                 card.Child = cardGrid;
 
+                // Dragging app inside column or between columns
                 card.PreviewMouseLeftButtonDown += (s, e) => _dragStartPoint = e.GetPosition(null);
                 card.MouseMove += (s, e) =>
                 {
-                    if (e.LeftButton == MouseButtonState.Pressed)
+                    if (e.LeftButton == MouseButtonState.Pressed && !btnRemove.IsMouseOver)
                     {
                         var diff = _dragStartPoint - e.GetPosition(null);
                         if (Math.Abs(diff.X) > 4 || Math.Abs(diff.Y) > 4)
@@ -634,10 +701,14 @@ public partial class MainWindow : Window
                     }
                 };
 
+                // Reordering within the same column by dropping onto another card
                 card.DragOver += (s, e) =>
                 {
-                    e.Effects = DragDropEffects.Move;
-                    e.Handled = true;
+                    if (e.Data.GetDataPresent(typeof(AppItem)) || _draggedBoardApp != null)
+                    {
+                        e.Effects = DragDropEffects.Move;
+                        e.Handled = true;
+                    }
                 };
 
                 card.Drop += (s, e) =>
@@ -681,18 +752,48 @@ public partial class MainWindow : Window
             colGrid.Children.Add(scroll);
             colBorder.Child = colGrid;
 
+            // Handle Drop onto the Column Container (either Column Reordering OR App dropping)
             colBorder.DragOver += (s, e) =>
             {
-                e.Effects = DragDropEffects.Move;
-                e.Handled = true;
+                if (e.Data.GetDataPresent(typeof(ColumnDragData)) || _draggedColumnNumber > 0)
+                {
+                    e.Effects = DragDropEffects.Move;
+                    colBorder.BorderBrush = (Brush)Application.Current.Resources["AccentColor"];
+                    e.Handled = true;
+                }
+                else if (e.Data.GetDataPresent(typeof(AppItem)) || _draggedBoardApp != null)
+                {
+                    e.Effects = DragDropEffects.Move;
+                    e.Handled = true;
+                }
+            };
+
+            colBorder.DragLeave += (s, e) =>
+            {
+                colBorder.BorderBrush = (Brush)Application.Current.Resources["BorderColor"];
             };
 
             colBorder.Drop += (s, e) =>
             {
+                colBorder.BorderBrush = (Brush)Application.Current.Resources["BorderColor"];
+
+                // 1. Column Reordering Drop
+                var colData = e.Data.GetData(typeof(ColumnDragData)) as ColumnDragData;
+                int sourceCol = colData?.ColumnNumber ?? _draggedColumnNumber;
+
+                if (sourceCol > 0 && sourceCol != colNum)
+                {
+                    MoveColumn(sourceCol, colNum);
+                    e.Handled = true;
+                    return;
+                }
+
+                // 2. App Drop into column empty space
                 var targetApp = _draggedBoardApp ?? e.Data.GetData(typeof(AppItem)) as AppItem;
                 if (targetApp != null)
                 {
                     targetApp.Column = colNum;
+
                     int lastInCol = _settings.Apps.FindLastIndex(a => a.Column == colNum && a != targetApp);
                     if (lastInCol >= 0)
                     {
@@ -715,6 +816,46 @@ public partial class MainWindow : Window
         }
     }
 
+    // Reorders entire columns and updates all apps inside
+    private void MoveColumn(int sourceCol, int targetCol)
+    {
+        if (sourceCol == targetCol) return;
+
+        // Temporarily park apps of source column at index -1
+        foreach (var app in _settings.Apps.Where(a => a.Column == sourceCol))
+        {
+            app.Column = -1;
+        }
+
+        if (sourceCol < targetCol)
+        {
+            // Shift intervening columns down by 1
+            foreach (var app in _settings.Apps.Where(a => a.Column > sourceCol && a.Column <= targetCol))
+            {
+                app.Column--;
+            }
+        }
+        else
+        {
+            // Shift intervening columns up by 1
+            foreach (var app in _settings.Apps.Where(a => a.Column >= targetCol && a.Column < sourceCol))
+            {
+                app.Column++;
+            }
+        }
+
+        // Place parked apps into the target column
+        foreach (var app in _settings.Apps.Where(a => a.Column == -1))
+        {
+            app.Column = targetCol;
+        }
+
+        SaveConfig();
+        BuildMultiColumnBoard();
+        BuildTrayContextMenu();
+    }
+
+    // Delete a specific column with unified confirmation dialog
     private void DeleteSpecificColumn(int colNum)
     {
         if (_settings.TrayColumns <= 1)
@@ -780,8 +921,18 @@ public partial class MainWindow : Window
         DeleteSpecificColumn(_settings.TrayColumns);
     }
 
+    // Confirms before running Auto-Balance to prevent accidental clicks
     private void BtnAutoBalance_Click(object sender, RoutedEventArgs e)
     {
+        bool proceed = ModernDialog.Confirm(
+            this,
+            "Auto-balance will reorganize and redistribute all your apps evenly across the current columns.\n\nYour custom column placements will be overwritten. Do you want to proceed?",
+            "Auto-Balance Columns",
+            "Auto-Balance",
+            "Cancel");
+
+        if (!proceed) return;
+
         int totalCols = Math.Max(1, _settings.TrayColumns);
         for (int i = 0; i < _settings.Apps.Count; i++)
         {
@@ -792,6 +943,7 @@ public partial class MainWindow : Window
         BuildTrayContextMenu();
     }
 
+    // --- PREFERENCES LOGIC ---
     private void RbTrayStyle_Checked(object sender, RoutedEventArgs e)
     {
         _settings.UseClassicTrayMenu = RbTrayClassic.IsChecked == true;
@@ -855,7 +1007,6 @@ public partial class MainWindow : Window
         }
     }
 
-    // Prevents async race conditions: any newly triggered refresh invalidates and cancels older runs
     private async void RefreshList(string filter = "")
     {
         int currentGen = unchecked(++_refreshCounter);
@@ -875,8 +1026,6 @@ public partial class MainWindow : Window
         foreach (var app in appList)
         {
             var icon = await IconHelper.GetIconAsync(app.AppLink, app.CustomIconPath, app.AppTitle);
-            
-            // Abort if a newer refresh was triggered while awaiting icon load
             if (currentGen != _refreshCounter) return;
 
             items.Add(new AppDisplayItem { App = app, Icon = icon });
@@ -884,7 +1033,6 @@ public partial class MainWindow : Window
 
         if (currentGen != _refreshCounter) return;
 
-        // Atomically replace display list items to prevent interleaved duplicates
         _displayList.Clear();
         foreach (var item in items)
         {
@@ -1210,6 +1358,7 @@ public partial class MainWindow : Window
             TxtArgs.Text = item.App.AppParams;
             TxtGroup.Text = item.App.AppGroup;
             TxtCustomIcon.Text = item.App.CustomIconPath;
+            TxtAppCol.Text = item.App.Column.ToString();
             UpdateEditIconPreview();
         }
     }
@@ -1277,6 +1426,8 @@ public partial class MainWindow : Window
             return;
         }
 
+        int.TryParse(TxtAppCol.Text.Trim(), out int assignedCol);
+
         if (_editingApp != null)
         {
             IconHelper.InvalidateCache(_editingApp.AppTitle);
@@ -1287,6 +1438,7 @@ public partial class MainWindow : Window
             _editingApp.AppParams = TxtArgs.Text.Trim();
             _editingApp.AppGroup = TxtGroup.Text.Trim();
             _editingApp.CustomIconPath = TxtCustomIcon.Text.Trim();
+            _editingApp.Column = Math.Max(0, assignedCol);
             _editingApp = null;
         }
         else
@@ -1299,7 +1451,8 @@ public partial class MainWindow : Window
                 AppLink = TxtPath.Text.Trim(),
                 AppParams = TxtArgs.Text.Trim(),
                 AppGroup = TxtGroup.Text.Trim(),
-                CustomIconPath = TxtCustomIcon.Text.Trim()
+                CustomIconPath = TxtCustomIcon.Text.Trim(),
+                Column = Math.Max(0, assignedCol)
             });
         }
 
@@ -1319,6 +1472,7 @@ public partial class MainWindow : Window
         TxtArgs.Clear();
         TxtGroup.Clear();
         TxtCustomIcon.Clear();
+        TxtAppCol.Text = "0";
         ImgIconPreview.Source = null;
     }
 
